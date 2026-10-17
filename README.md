@@ -111,3 +111,7 @@ Las pruebas de backend cubren consentimiento, aprobación y medidas, memoria por
 ## Despliegue
 
 La aplicación no se ha desplegado en DigitalOcean desde este entorno. Con el código transferido al servidor y los datos respaldados, el responsable del despliegue puede validar `docker compose config --quiet`, compilar las imágenes y arrancar los servicios. Los cambios Docker/Nginx preservan `/api/v1` y el volumen de datos; la pila completa de contenedores debe verificarse en destino. El entorno de desarrollo de esta entrega arranca de forma nativa y no necesita Redis para importar, revisar, archivar y exportar modelos.
+
+Si el entorno de compilación usa un proxy HTTPS con una autoridad propia, los Dockerfiles admiten un secreto BuildKit opcional `build_ca` con su paquete de certificados de confianza. Se usa solo al instalar dependencias; no se desactiva la verificación TLS ni se incorpora el certificado al artefacto. En una red con certificados públicos no hace falta proporcionar este secreto.
+
+Se validaron las imágenes de backend y frontend, y el flujo de importación, revisión aprobada y descarga `.archviz`/DXF a través de Nginx en tres contenedores aislados. Esa comprobación usa datos de prueba, no modifica el servidor público ni valida el endpoint antiguo de vídeo.

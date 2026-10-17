@@ -3,7 +3,12 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=secret,id=build_ca \
+    if [ -f /run/secrets/build_ca ]; then \
+        NODE_EXTRA_CA_CERTS=/run/secrets/build_ca npm ci; \
+    else \
+        npm ci; \
+    fi
 
 COPY . .
 RUN npm run build
