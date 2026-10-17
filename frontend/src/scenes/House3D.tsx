@@ -1,15 +1,17 @@
-import { useRef, useMemo } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useMemo } from 'react'
 import * as THREE from 'three'
 import { useProjectStore } from '../stores/projectStore'
 
-function WallMesh({ start, end, height = 2.8, thickness = 0.15 }: {
+function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
+  id: string
   start: [number, number, number]
   end: [number, number, number]
   height?: number
   thickness?: number
 }) {
-  const meshRef = useRef<THREE.Mesh>(null)
+  const selected = useProjectStore(s=>s.selectedElementId===id)
+  const plan = useProjectStore(s=>s.floorPlan)
+  const openings = [...(plan?.doors??[]),...(plan?.windows??[])].filter(o=>o.wall_id===id)
 
   const { position, rotation, scale } = useMemo(() => {
     const startVec = new THREE.Vector3(...start)
@@ -26,38 +28,41 @@ function WallMesh({ start, end, height = 2.8, thickness = 0.15 }: {
     }
   }, [start, end, height, thickness])
 
-  return (
-    <group>
-      <mesh ref={meshRef} position={position} rotation={rotation} scale={scale} castShadow receiveShadow>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#f5f5f0" roughness={0.9} />
-      </mesh>
-      {Array.from({ length: Math.floor(scale[2] / 0.4) }).map((_, i) => (
-        <mesh 
-          key={i}
-          position={[
-            position[0] + (i * 0.4 - scale[2]/2) * Math.sin(rotation[1]) * 0.1,
-            position[1],
-            position[2] + (i * 0.4 - scale[2]/2) * Math.cos(rotation[1]) * 0.1
-          ]}
-          rotation={rotation}
-          scale={[thickness + 0.02, height, 0.05]}
-        >
-          <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color="#e8e8e0" roughness={0.8} />
-        </mesh>
-      ))}
-    </group>
-  )
+  const length=scale[2]
+  const edges=[...new Set([0,length,...openings.flatMap(o=>[
+    Math.max(0,o.position*length-o.width/2),Math.min(length,o.position*length+o.width/2)
+  ])])].sort((a,b)=>a-b)
+  const pieces:{from:number;to:number;low:number;high:number}[]=[]
+  for(let i=0;i<edges.length-1;i++) {
+    const from=edges[i],to=edges[i+1],mid=(from+to)/2
+    const holes=openings.filter(o=>Math.abs(mid-o.position*length)<o.width/2)
+      .map(o=>({low:o.sill_height??0,high:Math.min(height,(o.sill_height??0)+o.height)})).sort((a,b)=>a.low-b.low)
+    let low=0
+    for(const hole of [...holes,{low:height,high:height}]) {
+      if(hole.low>low && to>from)pieces.push({from,to,low,high:hole.low})
+      low=Math.max(low,hole.high)
+    }
+  }
+  return <group position={[position[0],0,position[2]]} rotation={rotation}
+    onClick={e=>{e.stopPropagation();useProjectStore.setState({selectedElementId:id})}}>
+    {pieces.map((piece,i)=><mesh key={i} position={[0,(piece.low+piece.high)/2,(piece.from+piece.to)/2-length/2]} castShadow receiveShadow>
+      <boxGeometry args={[thickness,piece.high-piece.low,piece.to-piece.from]}/>
+      <meshStandardMaterial color={selected?'#18b9d8':'#f5f5f0'} roughness={.9}/>
+    </mesh>)}
+    {openings.map(o=><mesh key={o.id} position={[0,(o.sill_height??0)+o.height/2,(o.position-.5)*length]}>
+      <boxGeometry args={[thickness*.35,o.height,o.width]}/>
+      <meshStandardMaterial color={o.sill_height!==undefined?'#8bc2dd':'#a77d4a'} transparent={o.sill_height!==undefined} opacity={o.sill_height !== undefined ? .45 : 1}/>
+    </mesh>)}
+  </group>
 }
 
 function FloorMesh({ points }: { points: [number, number, number][] }) {
   const shape = useMemo(() => {
     const s = new THREE.Shape()
     if (points.length > 0) {
-      s.moveTo(points[0][0], points[0][2])
+      s.moveTo(points[0][0], -points[0][2])
       for (let i = 1; i < points.length; i++) {
-        s.lineTo(points[i][0], points[i][2])
+        s.lineTo(points[i][0], -points[i][2])
       }
       s.closePath()
     }
@@ -161,7 +166,7 @@ function FurnitureMesh({ item }: { item: any }) {
 }
 
 export default function House3D() {
-  const { walls, furniture } = useProjectStore()
+  const { walls, furniture, floorPlan, selectedElementId } = useProjectStore()
 
   const floorPoints = useMemo(() => {
     if (walls.length === 0) return [] as [number, number, number][]
@@ -198,6 +203,7 @@ export default function House3D() {
       {walls.map((wall) => (
         <WallMesh 
           key={wall.id}
+          id={wall.id}
           start={wall.start}
           end={wall.end}
           height={wall.height}
@@ -205,16 +211,10 @@ export default function House3D() {
         />
       ))}
 
-      {walls.length === 0 && (
-        <>
-          <WallMesh start={[-5, 0, -5]} end={[5, 0, -5]} />
-          <WallMesh start={[5, 0, -5]} end={[5, 0, 5]} />
-          <WallMesh start={[5, 0, 5]} end={[-5, 0, 5]} />
-          <WallMesh start={[-5, 0, 5]} end={[-5, 0, -5]} />
-          <WallMesh start={[-5, 0, 0]} end={[2, 0, 0]} />
-          <WallMesh start={[2, 0, 0]} end={[2, 0, 5]} />
-        </>
-      )}
+      {floorPlan?.columns.map(column=><mesh key={column.id} position={[column.position.x,column.height/2,column.position.z]} castShadow receiveShadow
+        onClick={e=>{e.stopPropagation();useProjectStore.setState({selectedElementId:column.id})}}>
+        <boxGeometry args={[column.width,column.height,column.depth]}/><meshStandardMaterial color={selectedElementId===column.id?'#18b9d8':'#c79a51'}/>
+      </mesh>)}
 
       {furniture.map((item) => (
         <FurnitureMesh key={item.id} item={item} />

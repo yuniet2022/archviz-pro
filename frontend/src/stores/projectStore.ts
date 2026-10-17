@@ -1,8 +1,10 @@
 import { create } from 'zustand'
+import type { FloorPlan, LearningInfo } from '../types/model'
 
 export type ViewMode = '3d-orbit' | 'top-down' | 'elevation' | 'walkthrough'
 
 export interface Wall {
+  [key: string]: unknown
   id: string
   start: [number, number, number]
   end: [number, number, number]
@@ -31,6 +33,12 @@ export interface ProjectState {
   selectedStyle: string | null
   isProcessing: boolean
   isPlaying: boolean
+  floorPlan: FloorPlan | null
+  revision: number
+  dirty: boolean
+  measurementsConfirmed: boolean
+  learning: LearningInfo | null
+  selectedElementId: string
 
   setProjectId: (id: string) => void
   setWalls: (walls: Wall[]) => void
@@ -53,17 +61,23 @@ export const useProjectStore = create<ProjectState>((set) => ({
   selectedStyle: null,
   isProcessing: false,
   isPlaying: false,
+  floorPlan: null,
+  revision: 0,
+  dirty: false,
+  measurementsConfirmed: false,
+  learning: null,
+  selectedElementId: '',
 
   setProjectId: (id) => set({ projectId: id }),
-  setWalls: (walls) => set({ walls }),
+  setWalls: (walls) => set({ walls, dirty: true, measurementsConfirmed: false, furniture: [] }),
   addFurniture: (item) => set((state) => ({ 
-    furniture: [...state.furniture, item] 
+    furniture: [...state.furniture, item], dirty: true
   })),
   removeFurniture: (id) => set((state) => ({
-    furniture: state.furniture.filter((f) => f.id !== id)
+    furniture: state.furniture.filter((f) => f.id !== id), dirty: true
   })),
   updateFurniture: (id, updates) => set((state) => ({
-    furniture: state.furniture.map((f) => 
+    dirty: true, furniture: state.furniture.map((f) =>
       f.id === id ? { ...f, ...updates } : f
     )
   })),
@@ -73,6 +87,11 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setIsPlaying: (v) => set({ isPlaying: v }),
   clearProject: () => set({
     projectId: null,
+    floorPlan: null,
+    revision: 0,
+    dirty: false,
+    measurementsConfirmed: false,
+    learning: null,
     walls: [],
     furniture: [],
     selectedStyle: null

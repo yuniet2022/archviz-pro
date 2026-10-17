@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import House3D from './scenes/House3D'
 import WalkthroughCamera from './scenes/WalkthroughCamera'
 import PlanUploader from './components/PlanUploader'
@@ -8,20 +8,21 @@ import { ViewModeControls, CameraController } from './components/ViewModes'
 import VideoExporter from './components/VideoExporter'
 import { useProjectStore } from './stores/projectStore'
 import { Box, Layers, MousePointer } from 'lucide-react'
-
-function LoadingScreen() {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-white text-sm">Loading 3D Engine...</p>
-      </div>
-    </div>
-  )
-}
+import ProjectReview from './components/ProjectReview'
+import axios from 'axios'
+import { loadProject } from './utils/model'
 
 export default function App() {
   const { projectId, viewMode, furniture } = useProjectStore()
+  useEffect(()=>{
+    let active=true
+    let previous:string|null=null
+    try {previous=localStorage.getItem('archviz-project')} catch {return}
+    if(previous) axios.get(`/api/v1/plans/${previous}`).then(r=>{
+      if(active && !useProjectStore.getState().projectId) loadProject(r.data)
+    }).catch(()=>{ /* A missing project leaves the uploader available. */ })
+    return ()=>{active=false}
+  },[])
 
   return (
     <div className="relative w-screen h-screen bg-gray-900 overflow-hidden">
@@ -61,7 +62,9 @@ export default function App() {
             </div>
           </div>
         )}
+        {projectId && <button className="text-white text-xs border border-white/30 rounded px-3 py-2" onClick={()=>{if(useProjectStore.getState().dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y abrir otro archivo?'))return;useProjectStore.getState().clearProject();try{localStorage.removeItem('archviz-project')}catch{/* optional */}}}>Importar otro archivo</button>}
       </header>
+      <ProjectReview />
 
       <div className="absolute inset-0 z-10 pointer-events-none">
         <div className="h-full flex flex-col justify-between p-6">

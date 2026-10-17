@@ -4,11 +4,13 @@ import uuid
 from typing import List
 from celery import Celery
 from app.models.schemas import Vector3
+from app.core.config import settings
 
 celery_app = Celery("video_generator", broker="redis://redis:6379/0")
 
 class VideoGenerator:
-    def __init__(self, output_dir: str = "/app/exports/videos"):
+    def __init__(self, output_dir: str = None):
+        output_dir = output_dir or settings.VIDEO_OUTPUT_DIR
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
 

@@ -27,6 +27,7 @@ export default function WalkthroughCamera() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if(e.target instanceof HTMLElement && e.target.closest('input,textarea,select,button')) return
       const key = e.key.toLowerCase()
       if (['w', 'a', 's', 'd'].includes(key)) {
         keysRef.current[key as keyof typeof keysRef.current] = true
@@ -47,7 +48,7 @@ export default function WalkthroughCamera() {
     }
   }, [])
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     if (viewMode === 'walkthrough') {
       if (isPlaying && pathRef.current) {
         progressRef.current += delta * 0.05

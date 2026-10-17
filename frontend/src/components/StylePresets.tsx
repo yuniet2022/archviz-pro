@@ -17,7 +17,7 @@ const styles = [
 export default function StylePresets() {
   const [activeStyle, setActiveStyle] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const { setSelectedStyle, walls, furniture, addFurniture } = useProjectStore()
+  const { setSelectedStyle, walls, floorPlan, addFurniture } = useProjectStore()
 
   const applyStyle = async (styleId: string) => {
     if (walls.length === 0) {
@@ -29,18 +29,8 @@ export default function StylePresets() {
     setActiveStyle(styleId)
 
     try {
-      const rooms = [{
-        id: 'room-1',
-        name: 'Living Room',
-        points: [
-          {x: -5, y: 0, z: -5},
-          {x: 5, y: 0, z: -5},
-          {x: 5, y: 0, z: 5},
-          {x: -5, y: 0, z: 5}
-        ],
-        area_sqm: 50,
-        ceiling_height: 2.8
-      }]
+      const rooms = floorPlan?.rooms ?? []
+      if(!rooms.length) {alert('Primero define ambientes cerrados y guarda su geometría.');return}
 
       const response = await axios.post(`/api/v1/furnish/auto/${styleId}`, rooms)
       const newFurniture = response.data.furniture.map((f: any) => ({

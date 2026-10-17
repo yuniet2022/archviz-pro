@@ -101,61 +101,12 @@ class PlanProcessor:
         return walls
 
     def _detect_openings(self, gray: np.ndarray, walls: List[Wall]) -> Tuple[List[Door], List[Window]]:
-        doors = []
-        windows = []
-
-        for i, wall in enumerate(walls):
-            wx = wall.end.x - wall.start.x
-            wz = wall.end.z - wall.start.z
-            length = np.sqrt(wx**2 + wz**2)
-
-            if length > 3.0:
-                doors.append(Door(
-                    wall_id=wall.id,
-                    position=0.5,
-                    width=0.9,
-                    height=2.1
-                ))
-
-                if length > 5.0:
-                    windows.append(Window(
-                        wall_id=wall.id,
-                        position=0.75,
-                        width=1.2,
-                        height=1.5,
-                        sill_height=0.9
-                    ))
-
-        return doors, windows
+        # Wall length alone is not evidence of an opening and must not become a training label.
+        return [], []
 
     def _detect_rooms(self, gray: np.ndarray, walls: List[Wall]) -> List[Room]:
-        rooms = []
-
-        if walls:
-            all_x = []
-            all_z = []
-            for w in walls:
-                all_x.extend([w.start.x, w.end.x])
-                all_z.extend([w.start.z, w.end.z])
-
-            if all_x and all_z:
-                min_x, max_x = min(all_x), max(all_x)
-                min_z, max_z = min(all_z), max(all_z)
-
-                points = [
-                    Vector3(x=min_x, y=0, z=min_z),
-                    Vector3(x=max_x, y=0, z=min_z),
-                    Vector3(x=max_x, y=0, z=max_z),
-                    Vector3(x=min_x, y=0, z=max_z),
-                ]
-
-                area = (max_x - min_x) * (max_z - min_z)
-
-                rooms.append(Room(
-                    name="Main Room",
-                    points=points,
-                    area_sqm=abs(area),
-                    ceiling_height=2.8
-                ))
-
-        return rooms
+        from shapely.ops import polygonize
+        lines = [LineString([(w.start.x, w.start.z), (w.end.x, w.end.z)]) for w in walls]
+        return [Room(points=[Vector3(x=x, z=z) for x, z in polygon.exterior.coords[:-1]],
+                     area_sqm=polygon.area) for polygon in polygonize(unary_union(lines))
+                if polygon.area >= 1]

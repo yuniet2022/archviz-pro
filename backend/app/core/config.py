@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "/app/uploads"
     EXPORT_DIR: str = "/app/exports"
     ASSET_DIR: str = "/app/assets"
+    PROJECT_DB: str = "/app/data/projects.sqlite3"
 
     FFMPEG_PATH: str = "ffmpeg"
     VIDEO_OUTPUT_DIR: str = "/app/exports/videos"
