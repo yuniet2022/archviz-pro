@@ -11,6 +11,7 @@ export default function PlanUploader() {
   const [metersPerPixel, setMetersPerPixel] = useState(.05)
   const [page, setPage] = useState(1)
   const [units, setUnits] = useState('auto')
+  const [pdfMode, setPdfMode] = useState('vector')
   const [message, setMessage] = useState('')
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -25,6 +26,7 @@ export default function PlanUploader() {
     formData.append('meters_per_pixel', String(metersPerPixel))
     formData.append('page', String(page))
     formData.append('dxf_units', units)
+    formData.append('pdf_mode', pdfMode)
 
     try {
       const response = await axios.post('/api/v1/plans/upload', formData, {
@@ -40,7 +42,7 @@ export default function PlanUploader() {
       setIsUploading(false)
       setIsProcessing(false)
     }
-  }, [setIsProcessing, metersPerPixel, page, units])
+  }, [setIsProcessing, metersPerPixel, page, units, pdfMode])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -99,10 +101,11 @@ export default function PlanUploader() {
             Elegir archivo
           </button>
           <div className="text-xs w-full space-y-2 text-gray-700" onClick={e=>e.stopPropagation()}>
+            <label className="block">Tipo de PDF <select aria-label="Tipo de PDF" value={pdfMode} onChange={e=>setPdfMode(e.target.value)} className="border rounded ml-2 p-1"><option value="vector">Plano CAD con cotas</option><option value="raster">Plano escaneado / imagen</option></select></label>
             <label className="block">Página PDF <input aria-label="Página PDF" type="number" min="1" value={page} onChange={e=>setPage(Math.max(1,Number(e.target.value)))} className="border rounded w-20 ml-2 p-1"/></label>
-            <label className="block">Metros por píxel / punto PDF <input aria-label="Metros por píxel" type="number" min=".00001" max="10" step=".001" value={metersPerPixel} onChange={e=>setMetersPerPixel(Number(e.target.value))} className="border rounded w-24 ml-2 p-1"/></label>
+            <label className="block">Metros por píxel (imágenes y PDF escaneados) <input aria-label="Metros por píxel" type="number" min=".00001" max="10" step=".001" value={metersPerPixel} onChange={e=>setMetersPerPixel(Number(e.target.value))} className="border rounded w-24 ml-2 p-1"/></label>
             <label className="block">Unidades DXF <select aria-label="Unidades DXF" value={units} onChange={e=>setUnits(e.target.value)} className="border rounded ml-2 p-1">{['auto','m','cm','mm','ft','in'].map(u=><option key={u}>{u}</option>)}</select></label>
-            <p>La escala inicial es aproximada. Comprueba las medidas antes de aprobar el modelo.</p>
+            <p>En planos CAD, la escala se calcula con las cotas y se aísla una planta. En escaneados, usa la escala manual. Comprueba medidas y alturas antes de aprobar.</p>
           </div>
           {message && <p role="alert" className="text-sm text-red-700">{message}</p>}
         </div>

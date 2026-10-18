@@ -165,7 +165,7 @@ def test_export_real_dimensions_openings_and_portable_json(client):
 def test_pdf_and_dxf_sources_are_interpreted_and_preserved(client):
     image=Image.new('RGB',(300,240),'white');ImageDraw.Draw(image).rectangle((40,40,260,200),outline='black',width=8)
     output=BytesIO();image.save(output,format='PDF')
-    pdf=client.post('/api/v1/plans/upload',files={'file':('plan.pdf',output.getvalue())},data={'meters_per_pixel':'.02'})
+    pdf=client.post('/api/v1/plans/upload',files={'file':('plan.pdf',output.getvalue())},data={'meters_per_pixel':'.02','pdf_mode':'raster'})
     assert pdf.status_code==200,pdf.text
     assert pdf.json()['detected_walls']>0
     assert pdf.json()['detected_doors']==0

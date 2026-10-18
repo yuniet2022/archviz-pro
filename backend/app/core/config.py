@@ -3,6 +3,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     APP_NAME: str = "ArchViz Pro API"
+    APP_RELEASE_ID: str = "development"
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
 

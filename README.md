@@ -4,7 +4,7 @@ Base de visualización arquitectónica con revisión de geometría, memoria de c
 
 ## Guardar información para la futura ingeniería inversa
 
-1. Importa una planta PDF, imagen o DXF, o un modelo arquitectónico JSON. En PDF selecciona la página y comprueba la escala en metros por punto PDF; para imágenes, metros por píxel. La escala inicial predeterminada **no está calibrada contra cotas**.
+1. Importa una planta PDF, imagen o DXF, o un modelo arquitectónico JSON. En PDF selecciona la página: **Plano CAD con cotas** conserva el motor vectorial del servidor y su calibración automática; **Plano escaneado / imagen** usa metros por punto PDF. Para imágenes se usan metros por píxel. La escala manual predeterminada **no está calibrada contra cotas**.
 2. Abre **Revisión y archivo**. Corrige extremos, grosor y altura de los muros, y posición, sección y altura de las columnas. Puedes añadir y eliminar esos elementos. Un clic en el elemento 3D lo selecciona en el panel.
 3. Registra nombre, planta, jurisdicción/normativa de referencia, norte y notas constructivas. Al cambiar geometría se retira la confirmación de medidas y se vacían las habitaciones anteriores que han quedado desactualizadas.
 4. Adjunta alzados, secciones, planos de estructura e instalaciones y modelos originales. Los formatos GLB, glTF, IFC y OBJ se conservan como **referencias sin interpretar**; aún no se convierten automáticamente en muros o planos.
@@ -57,7 +57,9 @@ Una malla 3D o una imagen de una casa no contiene necesariamente las capas, espe
 
 ## Importadores incluidos
 
-El PDF se rasteriza en la página elegida a un píxel por punto PDF. El detector de imágenes es aproximado y no separa automáticamente todas las vistas de una lámina. Se eliminó la invención de puertas/ventanas basada solo en la longitud de un muro y la habitación ficticia formada por el rectángulo envolvente; esas suposiciones no deben alimentar el dataset. Los ambientes se proponen solo con contornos cerrados.
+Para PDF CAD se conserva `VectorEngine` v7 de la instalación existente: lectura de trazos y textos con PyMuPDF, aislamiento de vista por etiquetas de ambientes, calibración por cotas y filtros de muebles/gabinetes. Se mantienen sus fórmulas y sus propuestas de altura/grosor; estas siguen necesitando revisión, incluida la relación de escala X/Y de ese motor. La selección de página permite procesar otra hoja sin cambiar la geometría de esa página. Los errores del motor vectorial se muestran al usuario; no se sustituye silenciosamente por un resultado raster. El perfil de importación incluye el modo PDF y el hash del motor para separar las memorias de detectores distintos.
+
+El modo **Plano escaneado / imagen** rasteriza la página elegida a un píxel por punto PDF. Este detector es aproximado y no separa automáticamente todas las vistas de una lámina. En ese detector se eliminó la invención de puertas/ventanas basada solo en la longitud de un muro y la habitación ficticia formada por el rectángulo envolvente; esas suposiciones no deben alimentar el dataset. La detección vectorial de ambientes conserva el procedimiento existente del motor v7.
 
 El lector DXF es básico: líneas como ejes de muro y columnas rectangulares alineadas en capas con `COL` o `PILAR`. Lee unidades de la cabecera o exige seleccionarlas si no están declaradas. No interpreta bloques, arcos, capas complejas ni contornos dobles como un importador CAD completo. Las columnas de PDF pueden añadirse y revisarse manualmente; no se ha validado reconocimiento completo de la vivienda real en esta copia.
 
@@ -115,3 +117,31 @@ La aplicación no se ha desplegado en DigitalOcean desde este entorno. Con el c�
 Si el entorno de compilación usa un proxy HTTPS con una autoridad propia, los Dockerfiles admiten un secreto BuildKit opcional `build_ca` con su paquete de certificados de confianza. Se usa solo al instalar dependencias; no se desactiva la verificación TLS ni se incorpora el certificado al artefacto. En una red con certificados públicos no hace falta proporcionar este secreto.
 
 Se validaron las imágenes de backend y frontend, y el flujo de importación, revisión aprobada y descarga `.archviz`/DXF a través de Nginx en tres contenedores aislados. Esa comprobación usa datos de prueba, no modifica el servidor público ni valida el endpoint antiguo de vídeo.
+
+### Actualizar una instalación existente sin Git
+
+`scripts/server_update.py` prepara la versión en una carpeta separada. Requiere Python 3 en el host, Docker Compose y un respaldo existente con `aplicacion.tar.gz` y `base-de-datos.sql`. Reconoce tanto `docker-compose` como `docker compose`.
+
+Desde la carpeta nueva descargada, ajustando la ruta del respaldo:
+
+```sh
+python3 scripts/server_update.py prepare --base /opt/archviz-pro --backup /root/archviz-respaldo-AAAAmmdd-HHMMSS --project archviz-pro
+```
+
+La preparación copia el motor vectorial completo de la instalación activa a la carpeta nueva, conserva sus bytes y registra su SHA-256. Genera un override de Compose que conserva la configuración de base, los datos, las conexiones a la base de datos y el trabajador actual. Añade la API y el frontend nuevos con imágenes separadas, y conserva `pipeline` como referencia montada en modo lectura. Las compilaciones se ejecutan una a una para reducir la presión de memoria en el servidor de 2 GB. No sustituye todavía los servicios activos.
+
+Cuando termine con `PREPARACIÓN COMPLETADA`:
+
+```sh
+python3 scripts/server_update.py activate
+```
+
+La activación comprueba que el motor y las configuraciones originales no hayan cambiado desde la preparación. Actualiza backend/frontend/Nginx y verifica la identificación de la API y el hash del HTML compilado. Si falla, vuelve a levantar backend y Nginx con la configuración original. Para volver atrás manualmente:
+
+```sh
+python3 scripts/server_update.py rollback
+```
+
+El rollback conserva el directorio de datos nuevo; no borra información ni restaura destructivamente la base de datos. Mantén las carpetas original y nueva, el respaldo y las imágenes antiguas: la versión activa utiliza archivos de la carpeta nueva. Una preparación posterior debe usar otra carpeta, no sobrescribir la versión activa.
+
+La prueba de migración reprodujo una instalación con fuentes montadas y frontend estático: preparación sin sustituir la web activa, conservación de configuración de base de datos y trabajador, activación, importación PDF vectorial y rollback. También se verificó el retorno automático a la versión original cuando falla la comprobación posterior a activar. Las 26 pruebas de backend incluyen equivalencia de geometría/escala/alturas con el motor vectorial original, selección de página y separación de memoria vector/raster. La vivienda real debe comprobarse de nuevo en el servidor con su A-2 después de activar.

@@ -8,3 +8,5 @@ exports/
 data/
 .env
 *.sqlite3*
+deployment.override.json
+deployment.state.json

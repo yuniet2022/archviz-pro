@@ -15,7 +15,8 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.models.schemas import FloorPlanData, PlanReview, PlanUploadResponse
 from app.services.project_repository import ProjectRepository, RevisionConflict
-from app.services.semantic_import import import_drawing
+from app.services.semantic_import import import_drawing, pdf_engine_recipe
+from typing import Literal
 from app.services.plan_export import dxf_plan, svg_plan
 
 router = APIRouter(prefix='/plans', tags=['plans'])
@@ -46,15 +47,19 @@ def load_project(project_id):
 @router.post('/upload', response_model=PlanUploadResponse)
 def upload_plan(file: UploadFile = File(...), page: int = Form(1, ge=1),
                 meters_per_pixel: float = Form(.05, gt=0, le=10),
-                dxf_units: str = Form('auto'), reuse_reviewed: bool = Form(True)):
+                dxf_units: str = Form('auto'), reuse_reviewed: bool = Form(True),
+                pdf_mode: Literal['vector','raster'] = Form('vector')):
     name, data = uploaded(file)
     suffix = Path(name).suffix.lower()
     if suffix not in ('.pdf','.dxf','.png','.jpg','.jpeg','.json','.archviz'):
         raise HTTPException(415, 'Usa PDF, DXF, PNG, JPG, modelo JSON o proyecto .archviz')
     if dxf_units not in ('auto','m','cm','mm','ft','in'):
         raise HTTPException(422, 'Unidades DXF inválidas')
-    recipe = json.dumps({'version':1, 'format':suffix, 'page':page,
-                         'meters_per_pixel':meters_per_pixel, 'dxf_units':dxf_units}, sort_keys=True)
+    parameters = {'version':1, 'format':suffix, 'page':page,
+                  'meters_per_pixel':meters_per_pixel, 'dxf_units':dxf_units}
+    if suffix == '.pdf':
+        parameters['pdf_engine'] = pdf_engine_recipe(pdf_mode)
+    recipe = json.dumps(parameters, sort_keys=True)
     try:
         if suffix in ('.json','.archviz'):
             decoded = data
@@ -81,7 +86,7 @@ def upload_plan(file: UploadFile = File(...), page: int = Form(1, ge=1),
             with tempfile.TemporaryDirectory() as temp:
                 path = Path(temp)/('drawing'+suffix)
                 path.write_bytes(data)
-                floor_plan = import_drawing(str(path), suffix, page, meters_per_pixel, dxf_units)
+                floor_plan = import_drawing(str(path), suffix, page, meters_per_pixel, dxf_units, pdf_mode)
         if not floor_plan.walls and not floor_plan.columns:
             raise ValueError('No se detectó geometría. Selecciona otra página o usa un modelo JSON revisado.')
     except (ValueError, ValidationError, RuntimeError, OSError, TypeError, AttributeError, DXFError) as error:
@@ -99,7 +104,7 @@ def upload_plan(file: UploadFile = File(...), page: int = Form(1, ge=1),
 
 @router.get('/learning/status')
 def learning_status():
-    return repository().stats()
+    return {**repository().stats(), 'release':settings.APP_RELEASE_ID}
 
 
 @router.get('/learning/dataset')

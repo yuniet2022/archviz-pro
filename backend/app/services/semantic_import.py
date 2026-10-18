@@ -1,14 +1,49 @@
 """Input adapters; all detected geometry needs review and manual calibration."""
 import math
+import hashlib
 from pathlib import Path
 import tempfile
 import ezdxf
 import pypdfium2 as pdfium
 from app.models.schemas import FloorPlanData, Wall, Column, Vector3
 from app.services.plan_processor import PlanProcessor
+from app.services.vector_engine import VectorEngine
 
 
-def import_drawing(path: str, suffix: str, page: int, meters_per_pixel: float, dxf_units: str):
+def pdf_engine_recipe(mode: str):
+    if mode not in ('vector', 'raster'):
+        raise ValueError('Modo PDF inválido')
+    module = Path(__file__).with_name('vector_engine.py') if mode == 'vector' else Path(__file__)
+    return {'mode':mode, 'sha256':hashlib.sha256(module.read_bytes()).hexdigest()}
+
+
+def import_vector_pdf(path: str, page_number: int):
+    import fitz
+    with fitz.open(path) as document:
+        if document.needs_pass:
+            raise ValueError('El PDF necesita contraseña')
+        if not 1 <= page_number <= len(document):
+            raise ValueError('Número de página fuera del documento')
+        selected = document[page_number-1]
+        if selected.rect.width*selected.rect.height > 25_000_000:
+            raise ValueError('Página demasiado grande')
+        if page_number == 1:
+            result = VectorEngine().process_pdf(path)
+        else:
+            with tempfile.TemporaryDirectory() as temp, fitz.open() as single_page:
+                single_page.insert_pdf(document, from_page=page_number-1, to_page=page_number-1)
+                isolated = str(Path(temp)/'selected.pdf')
+                single_page.save(isolated)
+                result = VectorEngine().process_pdf(isolated)
+    result.warnings.append('Escala y alturas propuestas por el motor vectorial: confirmar con cotas y alzados antes de aprobar.')
+    return result
+
+
+def import_drawing(path: str, suffix: str, page: int, meters_per_pixel: float, dxf_units: str, pdf_mode: str = 'vector'):
+    if suffix == '.pdf' and pdf_mode == 'vector':
+        return import_vector_pdf(path, page)
+    if suffix == '.pdf' and pdf_mode != 'raster':
+        raise ValueError('Modo PDF inválido')
     if suffix == '.dxf':
         document = ezdxf.readfile(path)
         unit_codes = {1: .0254, 2: .3048, 4: .001, 5: .01, 6: 1}
