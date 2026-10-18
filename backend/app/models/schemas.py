@@ -162,6 +162,12 @@ class FloorPlanData(BaseModel):
         return self
 
 class StylePreset(str, Enum):
+    WARM_MODERN = "warm_modern"
+    CLASSIC = "classic"
+    JAPANDI = "japandi"
+    MEDITERRANEAN = "mediterranean"
+    TROPICAL = "tropical"
+    LUXURY = "luxury"
     MODERN_FARMHOUSE = "modern_farmhouse"
     COASTAL = "coastal"
     MID_CENTURY = "mid_century"

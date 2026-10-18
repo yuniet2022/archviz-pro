@@ -37,8 +37,10 @@ async def root():
             "2D Plan Processing",
             "3D Model Generation",
             "Auto-Furnish by Style",
-            "Video Tour Export",
-            "GLB Export"
+            "Measured Furniture Catalogue",
+            "Collision-Aware Walking Routes",
+            "Browser Scene Recording",
+            "Archviz Project Archive"
         ]
     }
 

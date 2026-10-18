@@ -12,7 +12,11 @@ export function loadProject(data: {project_id: string; floor_plan: FloorPlan; re
     floorPlan: data.floor_plan, walls, revision: data.revision, learning: data.learning,
     measurementsConfirmed: data.measurements_confirmed ?? false, dirty: false,
     furniture: ((data.floor_plan.furniture ?? []) as {id:string;name:string;category:string;position:Point;rotation:Point;scale:Point;color:string;material:string;dimensions:Point}[])
-      .map(f=>({...f,position:tuple(f.position),rotation:tuple(f.rotation),scale:tuple(f.scale),dimensions:tuple(f.dimensions)})), selectedStyle: null })
+      .map(f=>({...f,position:tuple(f.position),rotation:tuple(f.rotation),scale:tuple(f.scale),dimensions:tuple(f.dimensions)})),
+    selectedStyle:data.floor_plan.interior_style?.id??null, selectedFurnitureId:'',placementMode:false,
+    tour:null,isPlaying:false,tourProgress:0,tourPointMode:false,
+    tourDuration:Math.max(10,Math.min(180,data.floor_plan.tour_settings?.duration??60)),
+    recordingQuality:data.floor_plan.tour_settings?.quality==='1080p'?'1080p':'720p' })
   try { localStorage.setItem('archviz-project', data.project_id) } catch { /* storage may be unavailable */ }
 }
 

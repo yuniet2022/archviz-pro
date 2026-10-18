@@ -3,23 +3,25 @@ import { OrbitControls, PerspectiveCamera, OrthographicCamera } from '@react-thr
 import type { ViewMode } from '../stores/projectStore'
 import { useThree } from '@react-three/fiber'
 import { useMemo } from 'react'
+import { walkSpawn } from '../utils/walking'
+import { currentPlan } from '../utils/interior'
 
 const modes: { id: ViewMode; label: string; shortcut: string }[] = [
-  { id: '3d-orbit', label: '3D Orbit', shortcut: '1' },
-  { id: 'top-down', label: 'Top View', shortcut: '2' },
-  { id: 'elevation', label: 'Elevation', shortcut: '3' },
-  { id: 'walkthrough', label: 'Walkthrough', shortcut: '4' },
+  { id: '3d-orbit', label: 'Vista 3D', shortcut: '1' },
+  { id: 'top-down', label: 'Planta', shortcut: '2' },
+  { id: 'elevation', label: 'Alzado', shortcut: '3' },
+  { id: 'walkthrough', label: 'Paseo virtual', shortcut: '4' },
 ]
 
 export function ViewModeControls() {
-  const { viewMode, setViewMode, isPlaying, setIsPlaying } = useProjectStore()
+  const { viewMode, setViewMode, isPlaying, setIsPlaying, tour, recording } = useProjectStore()
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-2 flex gap-1">
       {modes.map((mode) => (
         <button
           key={mode.id}
-          onClick={() => setViewMode(mode.id)}
+          disabled={recording} onClick={() => {setViewMode(mode.id);if(mode.id==='walkthrough')useProjectStore.setState({activePanel:'tour'})}}
           className={`
             px-3 py-2 rounded-lg text-xs font-medium transition-all
             ${viewMode === mode.id
@@ -29,13 +31,13 @@ export function ViewModeControls() {
           `}
         >
           <span className="block">{mode.label}</span>
-          <span className="block text-[10px] opacity-70 mt-0.5">⌘{mode.shortcut}</span>
+
         </button>
       ))}
 
       {viewMode === 'walkthrough' && (
         <button
-          onClick={() => setIsPlaying(!isPlaying)}
+          disabled={recording} onClick={() => {if(tour)setIsPlaying(!isPlaying);else useProjectStore.setState({activePanel:'tour'})}}
           className={`
             ml-2 px-3 py-2 rounded-lg text-xs font-bold transition-all
             ${isPlaying 
@@ -44,7 +46,7 @@ export function ViewModeControls() {
             }
           `}
         >
-          {isPlaying ? '⏹ Stop Tour' : '▶ Play Tour'}
+          {isPlaying ? '⏸ Pausar' : tour?'▶ Reproducir':'Preparar recorrido'}
         </button>
       )}
     </div>
@@ -71,7 +73,9 @@ export function CameraController() {
   const target:[number,number,number]=[bounds.x,bounds.height*.35,bounds.z]
 
   if (viewMode === 'walkthrough') {
-    return <PerspectiveCamera makeDefault position={[-4, 1.7, -4]} fov={75} />
+    const state=useProjectStore.getState(),point=state.tour?.points[0]
+    const spawn:[number,number,number]=point?[point.x,point.y,point.z]:floorPlan?walkSpawn(currentPlan(),state.furniture):[0,1.6,0]
+    return <PerspectiveCamera makeDefault position={spawn} fov={65} near={.05} far={1000}/>
   }
 
   if (viewMode === 'top-down') {

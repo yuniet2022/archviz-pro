@@ -2,6 +2,23 @@
 
 Base de visualización arquitectónica con revisión de geometría, memoria de correcciones y archivo de fuentes originales. El modelo conserva información arquitectónica además de su aspecto en pantalla: muros, columnas, puertas y ventanas vinculadas a muros, habitaciones, mobiliario, medidas en metros y datos del proyecto.
 
+## Mobiliario, estilos y paseo virtual
+
+En **Muebles y estilos**, elige una de las 14 paletas: moderno cálido, contemporáneo, clásico, farmhouse moderno, costero, mid-century, industrial, artesano, minimalista, escandinavo, Japandi, mediterráneo, tropical o elegante. El estilo cambia paredes, suelo y acabados del mobiliario sin mover las piezas.
+
+Después elige **Decorar yo** o **Decorar automáticamente**:
+
+- El modo manual ofrece un catálogo local de 26 piezas con dimensiones en metros. Selecciona un ambiente, añade una pieza y cambia su posición, giro, dimensiones y color. También puedes colocarla haciendo clic sobre el suelo en la vista de planta. La colocación se valida antes de aplicarse: no admite piezas fuera del contorno, sobre patios, dentro de muros/columnas, en el acceso de las puertas ni solapadas con otros muebles sólidos.
+- El asistente propone una distribución por ambiente usando contornos y medidas. Distingue baños, dormitorios, cocina, comedor, sala, lavandería, clósets y terrazas; no convierte zonas de paso o garajes en dormitorios por su área. En una zona abierta con varias etiquetas PDF coloca piezas cerca de sus usos. Si un nombre no permite identificar el uso, pide asignarlo en **Uso del ambiente**. No fuerza muebles que no caben. La propuesta se puede editar o vaciar conservando la casa.
+
+El asistente actual usa un catálogo y reglas geométricas; no consulta un modelo generativo ni se ha entrenado como decorador. Las paletas y modelos paramétricos permiten evaluar la distribución y los colores, sin equivaler a un catálogo fotorealista de fabricantes. Las piezas sanitarias y los electrodomésticos propuestos no se han cotejado con instalaciones del plano. Las holguras sirven para visualización y no certifican accesibilidad ni normativa.
+
+En **Recorrido y vídeo**, prepara una ruta automática o marca al menos dos puntos en planta. Se conectan por el suelo libre con aberturas de puerta, muros, columnas y mobiliario. No se suaviza la trayectoria con curvas que corten esquinas. Los ambientes sin conexión libre se indican; por ejemplo, un baño con acceso únicamente desde fuera del contorno transitable no se añade a través de un muro. Puedes caminar con WASD, girar con las flechas o arrastrar para mirar; también hay controles táctiles. Los techos del paseo son una presentación a las alturas de ambiente del modelo, no un cálculo estructural nuevo.
+
+**Grabar vídeo del recorrido** captura la escena WebGL real en el navegador a una salida de 720p o 1080p. El navegador elige MP4 cuando dispone de codificador compatible o WebM como alternativa. La frecuencia y resolución efectiva de la escena dependen del dispositivo y del tamaño del visor; no se promete un render de 4K ni 30 fotogramas efectivos por segundo. La grabación requiere mantener visible la pestaña y no graba micrófono ni audio. El archivo se descarga desde el navegador, sin renderizar en el servidor de 2 GB. Descárgalo antes de cerrar la página.
+
+Guarda en **Revisión y archivo** para conservar muebles, identificadores de catálogo, uso de ambientes, estilo, puntos marcados y ajustes de recorrido. Estos datos también se incluyen en `.archviz`/JSON/ZIP. Cambiar posiciones o geometría invalida la ruta anterior, que se vuelve a calcular para comprobar obstáculos. Las sombras proyectadas siguen desactivadas. El servicio antiguo de vídeo de prueba devuelve 410 y ya no se usa desde el visor.
+
 ## Guardar información para la futura ingeniería inversa
 
 1. Importa una planta PDF, imagen o DXF, o un modelo arquitectónico JSON. En PDF selecciona la página: **Plano CAD con cotas** distingue caras/tramas de muro y calibra ambos ejes con las cotas; **Plano escaneado / imagen** usa metros por punto PDF. Para imágenes se usan metros por píxel. La escala manual predeterminada **no está calibrada contra cotas**.
@@ -90,7 +107,7 @@ npm run dev
 
 Vite conserva el prefijo `/api` y dirige las peticiones al backend. La persistencia SQLite incluye archivos binarios y revisiones; `PROJECT_DB` define su ubicación. En Docker, `./data` se monta en `/app/data` para conservarla al recrear el contenedor. Respalda la base con el mecanismo de backup de SQLite y descarga el archivo del proyecto. No elimines el volumen de datos al actualizar.
 
-Esta base tiene un único espacio de trabajo sin autenticación ni separación por clientes. Antes de ofrecer archivos privados a usuarios independientes se necesita añadir cuentas, permisos y aislamiento. El endpoint antiguo de vídeo Celery conserva defectos y no forma parte de la validación de esta entrega; requiere Redis y aún no genera un recorrido real de la escena.
+Esta base tiene un único espacio de trabajo sin autenticación ni separación por clientes. Antes de ofrecer archivos privados a usuarios independientes se necesita añadir cuentas, permisos y aislamiento. El paseo y su grabación funcionan en el navegador, sin depender del antiguo trabajador de vídeo Celery.
 
 ## Verificación
 
@@ -115,6 +132,12 @@ Las pruebas de backend cubren consentimiento, aprobación y medidas, memoria por
 | `DELETE /api/v1/plans/{id}/learning` | Retirar las revisiones de futuras reutilizaciones/datasets |
 | `GET /api/v1/plans/learning/status` | Contadores y modo de aprendizaje real |
 | `GET /api/v1/plans/learning/dataset` | Descargar los pares autorizados en JSONL |
+| `GET /api/v1/furnish/styles` | Paletas de acabados disponibles |
+| `GET /api/v1/furnish/catalog` | Catálogo local y dimensiones en metros |
+| `POST /api/v1/furnish/layout/{style}` | Proponer distribución desde la planta completa |
+| `POST /api/v1/furnish/add` | Añadir una pieza donde quepa en el ambiente elegido |
+| `POST /api/v1/furnish/placement` | Validar una colocación o cambio de medidas |
+| `POST /api/v1/furnish/tour` | Conectar paradas por el suelo transitable |
 
 ## Despliegue
 

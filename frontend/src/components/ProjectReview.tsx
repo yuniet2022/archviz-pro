@@ -18,6 +18,8 @@ function NumberField({label,value,onChange}:{label:string;value:number;onChange:
 export default function ProjectReview() {
   const {projectId, floorPlan, walls, dirty, revision, measurementsConfirmed, learning, setWalls} = useProjectStore()
   const [open,setOpen] = useState(false)
+  const activePanel=useProjectStore(s=>s.activePanel),recording=useProjectStore(s=>s.recording)
+  useEffect(()=>{if(activePanel||recording)setOpen(false)},[activePanel,recording])
   const selected = useProjectStore(s=>s.selectedElementId)
   const setSelected = (id:string)=>useProjectStore.setState({selectedElementId:id})
   const [approved,setApproved] = useState(false)
@@ -41,7 +43,7 @@ export default function ProjectReview() {
   const windowOpening = floorPlan.windows.find(o=>o.id===selected)
   const opening = door ?? windowOpening
   const changed = (plan:FloorPlan) => {
-    useProjectStore.setState({floorPlan:plan,dirty:true,measurementsConfirmed:false})
+    useProjectStore.setState({floorPlan:plan,dirty:true,measurementsConfirmed:false,tour:null,isPlaying:false})
     setApproved(false)
   }
   const updateWall = (patch:Partial<Wall>) => {
@@ -104,7 +106,7 @@ export default function ProjectReview() {
     changed({...scaled,furniture:[]}); setFactor(1); setMessage('Geometría reescalada. Mobiliario retirado; comprueba medidas y vuelve a guardarlo.')
   }
   return <>
-    <button onClick={()=>setOpen(!open)} className="absolute top-20 right-6 z-30 bg-white text-gray-800 rounded-lg px-4 py-2 shadow-lg text-sm">{open?'Cerrar revisión':'Revisión y archivo'}</button>
+    <button disabled={recording} onClick={()=>{useProjectStore.setState({activePanel:null});setOpen(!open)}} className="absolute top-20 right-6 z-30 bg-white text-gray-800 rounded-lg px-4 py-2 shadow-lg text-sm">{open?'Cerrar revisión':'Revisión y archivo'}</button>
     {open && <aside aria-label="Revisión y archivo" className="absolute z-30 right-6 top-32 bottom-6 w-96 max-w-[calc(100vw-3rem)] overflow-y-auto rounded-xl bg-white shadow-2xl p-5 text-gray-800 space-y-4">
       <h2 className="font-bold text-lg">Proyecto y aprendizaje</h2>
       <p className="text-xs text-gray-600">Revisión {revision} · {dirty?'Cambios sin guardar':'Guardado'} · {learning?.reused?'Corrección recuperada del mismo archivo':'Modelo para revisar'}</p>

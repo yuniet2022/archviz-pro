@@ -1,6 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 import { useProjectStore } from '../stores/projectStore'
+import FurnitureMesh from './FurnitureMesh'
+import { moveFurniture, interiorError } from '../utils/interior'
+import type { ModelRoom } from '../types/model'
 
 function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
   id: string
@@ -11,6 +14,7 @@ function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
 }) {
   const selected = useProjectStore(s=>s.selectedElementId===id)
   const plan = useProjectStore(s=>s.floorPlan)
+  const wallColor=plan?.interior_style?.wall??'#f5f5f0'
   const openings = [...(plan?.doors??[]),...(plan?.windows??[])].filter(o=>o.wall_id===id)
 
   const { position, rotation, scale } = useMemo(() => {
@@ -47,7 +51,7 @@ function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
     onClick={e=>{e.stopPropagation();useProjectStore.setState({selectedElementId:id})}}>
     {pieces.map((piece,i)=><mesh key={i} position={[0,(piece.low+piece.high)/2,(piece.from+piece.to)/2-length/2]}>
       <boxGeometry args={[thickness,piece.high-piece.low,piece.to-piece.from]}/>
-      <meshStandardMaterial color={selected?'#18b9d8':'#f5f5f0'} roughness={.9}/>
+      <meshStandardMaterial color={selected?'#18b9d8':wallColor} roughness={.9}/>
     </mesh>)}
     {openings.map(o=>o.sill_height!==undefined ? <group key={o.id} position={[0,o.sill_height,(o.position-.5)*length]}>
       <mesh position={[0,o.height/2,0]}>
@@ -80,7 +84,8 @@ function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
   </group>
 }
 
-function FloorMesh({ points, holes = [] }: { points: [number, number, number][]; holes?: [number, number, number][][] }) {
+function FloorMesh({ points, holes = [], texture }: { points: [number, number, number][]; holes?: [number, number, number][][]; texture:THREE.Texture }) {
+  const color=useProjectStore(s=>s.floorPlan?.interior_style?.floor??'#d4a574')
   const shape = useMemo(() => {
     const s = new THREE.Shape()
     if (points.length > 0) {
@@ -100,103 +105,65 @@ function FloorMesh({ points, holes = [] }: { points: [number, number, number][];
   }, [points, holes])
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} onClick={async event=>{
+      const state=useProjectStore.getState()
+      if(state.recording)return
+      if(state.tourPointMode&&state.floorPlan) {
+        event.stopPropagation()
+        const points=state.floorPlan.tour_waypoints??[]
+        if(points.length>=64)return
+        useProjectStore.setState({floorPlan:{...state.floorPlan,tour_waypoints:[...points,{x:event.point.x,y:1.6,z:event.point.z}]},dirty:true,tour:null,isPlaying:false})
+      } else if(state.placementMode) {
+        event.stopPropagation()
+        const item=state.furniture.find(f=>f.id===state.selectedFurnitureId)
+        if(!item)return
+        try {
+          await moveFurniture({...item,position:[event.point.x,item.position[1],event.point.z]})
+          useProjectStore.setState({placementMode:false,interiorMessage:'Mueble colocado.'})
+        } catch(error){useProjectStore.setState({interiorMessage:interiorError(error)})}
+      }
+    }}>
       <shapeGeometry args={[shape]} />
-      <meshStandardMaterial color="#d4a574" roughness={0.6} side={THREE.DoubleSide} />
+      <meshStandardMaterial color={color} map={texture} roughness={.82} side={THREE.DoubleSide} />
     </mesh>
   )
 }
 
-function FurnitureMesh({ item }: { item: any }) {
-  const color = item.color || '#ffffff'
-  const [w, h, d] = item.dimensions || [1, 1, 1]
-
-  const renderGeometry = () => {
-    switch (item.category) {
-      case 'seating':
-        return (
-          <group>
-            <mesh position={[0, h*0.2, 0]}>
-              <boxGeometry args={[w, h*0.4, d]} />
-              <meshStandardMaterial color={color} roughness={0.8} />
-            </mesh>
-            <mesh position={[0, h*0.6, -d*0.35]}>
-              <boxGeometry args={[w, h*0.6, d*0.1]} />
-              <meshStandardMaterial color={color} roughness={0.8} />
-            </mesh>
-            <mesh position={[0, h*0.45, 0]}>
-              <boxGeometry args={[w*0.9, h*0.1, d*0.9]} />
-              <meshStandardMaterial color={color} roughness={0.9} />
-            </mesh>
-            {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([lx, lz], i) => (
-              <mesh key={i} position={[lx * w*0.4, 0, lz * d*0.4]}>
-                <cylinderGeometry args={[0.02, 0.015, h*0.2, 8]} />
-                <meshStandardMaterial color="#8B4513" metalness={0.3} />
-              </mesh>
-            ))}
-          </group>
-        )
-      case 'bed':
-        return (
-          <group>
-            <mesh position={[0, h*0.3, 0]}>
-              <boxGeometry args={[w, h*0.3, d]} />
-              <meshStandardMaterial color="#f0f0f0" roughness={0.9} />
-            </mesh>
-            <mesh position={[0, h*0.6, -d*0.45]}>
-              <boxGeometry args={[w, h*0.6, d*0.08]} />
-              <meshStandardMaterial color={color} roughness={0.7} />
-            </mesh>
-            {[-0.3, 0.3].map((x, i) => (
-              <mesh key={i} position={[x, h*0.5, -d*0.25]}>
-                <boxGeometry args={[w*0.25, h*0.15, d*0.15]} />
-                <meshStandardMaterial color="#ffffff" roughness={1} />
-              </mesh>
-            ))}
-            <mesh position={[0, h*0.1, 0]}>
-              <boxGeometry args={[w, h*0.15, d]} />
-              <meshStandardMaterial color={color} roughness={0.6} />
-            </mesh>
-          </group>
-        )
-      case 'table':
-        return (
-          <group>
-            <mesh position={[0, h*0.45, 0]}>
-              <boxGeometry args={[w, h*0.05, d]} />
-              <meshStandardMaterial color={color} roughness={0.5} />
-            </mesh>
-            {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([lx, lz], i) => (
-              <mesh key={i} position={[lx * w*0.4, h*0.2, lz * d*0.4]}>
-                <boxGeometry args={[0.05, h*0.4, 0.05]} />
-                <meshStandardMaterial color={color} roughness={0.5} />
-              </mesh>
-            ))}
-          </group>
-        )
-      default:
-        return (
-          <mesh>
-            <boxGeometry args={[w, h, d]} />
-            <meshStandardMaterial color={color} roughness={0.7} />
-          </mesh>
-        )
-    }
-  }
-
-  return (
-    <group 
-      position={item.position}
-      rotation={item.rotation}
-      scale={item.scale}
-    >
-      {renderGeometry()}
-    </group>
-  )
+function RoomCeiling({room}:{room:ModelRoom}) {
+  const shape=useMemo(()=>new THREE.Shape(room.points.map(p=>new THREE.Vector2(p.x,-p.z))),[room])
+  return <mesh rotation={[-Math.PI/2,0,0]} position={[0,room.ceiling_height,0]}>
+    <shapeGeometry args={[shape]}/><meshStandardMaterial color="#f6f3eb" roughness={.95} side={THREE.DoubleSide}/>
+  </mesh>
 }
 
 export default function House3D() {
-  const { walls, furniture, floorPlan, selectedElementId } = useProjectStore()
+  const walls=useProjectStore(s=>s.walls),furniture=useProjectStore(s=>s.furniture)
+  const floorPlan=useProjectStore(s=>s.floorPlan),selectedElementId=useProjectStore(s=>s.selectedElementId)
+  const viewMode=useProjectStore(s=>s.viewMode)
+  const texture=useMemo(()=>{
+    const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256
+    const context=canvas.getContext('2d')!
+    context.fillStyle='#ebe7df';context.fillRect(0,0,256,256)
+    for(let i=0;i<64;i++) {
+      context.strokeStyle=`rgba(85,65,40,${.025+(i%5)*.012})`;context.lineWidth=.5
+      context.beginPath();context.moveTo(0,i*4);context.bezierCurveTo(60,i*4+3,150,i*4-2,256,i*4);context.stroke()
+    }
+    context.strokeStyle='rgba(65,55,40,.16)';context.lineWidth=1
+    for(let row=0;row<4;row++) {context.strokeRect(0,row*64,256,64);context.strokeRect(row%2?160:80,row*64,256,64)}
+    const map=new THREE.CanvasTexture(canvas);map.wrapS=map.wrapT=THREE.RepeatWrapping;map.repeat.set(.5,.5);map.colorSpace=THREE.SRGBColorSpace
+    return map
+  },[])
+  const tileTexture=useMemo(()=>{
+    const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128
+    const context=canvas.getContext('2d')!
+    context.fillStyle='#ebe9e3';context.fillRect(0,0,128,128)
+    context.strokeStyle='#c9c6bf';context.lineWidth=1;context.strokeRect(0,0,128,128)
+    for(let i=0;i<300;i++) {context.fillStyle=`rgba(80,75,65,${.015+(i%5)*.005})`;context.fillRect((i*53)%128,(i*71)%128,2,1)}
+    const map=new THREE.CanvasTexture(canvas);map.wrapS=map.wrapT=THREE.RepeatWrapping;map.repeat.set(1.65,1.65);map.colorSpace=THREE.SRGBColorSpace
+    return map
+  },[])
+  useEffect(()=>()=>{texture.dispose();tileTexture.dispose()},[texture,tileTexture])
+  const stoneFloor=['industrial','contemporary','luxury','mediterranean'].includes(floorPlan?.interior_style?.id??'')
 
   const floorRegions = useMemo(() => {
     const regions = floorPlan?.floor_regions?.length ? floorPlan.floor_regions :
@@ -207,7 +174,8 @@ export default function House3D() {
 
   return (
     <group>
-      <ambientLight intensity={0.4} />
+      <ambientLight intensity={.85} />
+      <hemisphereLight args={['#fff7e9','#c5cbd0',.75]}/>
       <directionalLight 
         position={[10, 20, 10]} 
         intensity={1.5} 
@@ -219,7 +187,8 @@ export default function House3D() {
         <meshStandardMaterial color="#e0e0e0" />
       </mesh>
 
-      {floorRegions.map((region,i)=><FloorMesh key={i} points={region.points} holes={region.holes}/>)}
+      {floorRegions.map((region,i)=><FloorMesh key={i} points={region.points} holes={region.holes} texture={stoneFloor?tileTexture:texture}/>)}
+      {viewMode==='walkthrough'&&floorPlan?.rooms.filter(room=>room.points.length>=3).map(room=><RoomCeiling key={room.id} room={room}/>)}
 
       {walls.map((wall) => (
         <WallMesh 
@@ -235,14 +204,15 @@ export default function House3D() {
       {floorPlan?.columns.map(column=><mesh key={column.id} position={[column.position.x,column.height/2,column.position.z]} rotation={[0,column.rotation??0,0]}
         onClick={e=>{e.stopPropagation();useProjectStore.setState({selectedElementId:column.id})}}>
         {column.shape==='circular' ? <cylinderGeometry args={[column.width/2,column.width/2,column.height,32]}/> : <boxGeometry args={[column.width,column.height,column.depth]}/>}
-        <meshStandardMaterial color={selectedElementId===column.id?'#18b9d8':'#f5f5f0'} roughness={.9}/>
+        <meshStandardMaterial color={selectedElementId===column.id?'#18b9d8':floorPlan.interior_style?.wall??'#f5f5f0'} roughness={.9}/>
       </mesh>)}
 
       {furniture.map((item) => (
-        <FurnitureMesh key={item.id} item={item} />
+        <FurnitureMesh key={item.id} item={item} woodTexture={texture}/>
       ))}
 
-      <gridHelper args={[50, 50, '#cccccc', '#eeeeee']} position={[0, -0.03, 0]} />
+      {viewMode!=='walkthrough'&&<gridHelper args={[50, 50, '#cccccc', '#eeeeee']} position={[0, -0.03, 0]} />}
+      {viewMode==='top-down'&&(floorPlan?.tour_waypoints??[]).map((p,i)=><mesh key={i} position={[p.x,.08,p.z]} rotation={[-Math.PI/2,0,0]}><circleGeometry args={[.15,24]}/><meshBasicMaterial color="#2463eb"/></mesh>)}
     </group>
   )
 }

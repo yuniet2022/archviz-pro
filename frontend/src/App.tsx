@@ -5,7 +5,8 @@ import WalkthroughCamera from './scenes/WalkthroughCamera'
 import PlanUploader from './components/PlanUploader'
 import StylePresets from './components/StylePresets'
 import { ViewModeControls, CameraController } from './components/ViewModes'
-import VideoExporter from './components/VideoExporter'
+import VideoExporter, { WalkingControls } from './components/VideoExporter'
+import TourRecorder from './scenes/TourRecorder'
 import { useProjectStore } from './stores/projectStore'
 import { Box, Layers, MousePointer } from 'lucide-react'
 import ProjectReview from './components/ProjectReview'
@@ -13,7 +14,8 @@ import axios from 'axios'
 import { loadProject } from './utils/model'
 
 export default function App() {
-  const { projectId, viewMode, furniture } = useProjectStore()
+  const projectId=useProjectStore(s=>s.projectId),viewMode=useProjectStore(s=>s.viewMode)
+  const furniture=useProjectStore(s=>s.furniture),recording=useProjectStore(s=>s.recording)
   useEffect(()=>{
     let active=true
     let previous:string|null=null
@@ -27,13 +29,14 @@ export default function App() {
   return (
     <div className="relative w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="absolute inset-0">
-        <Canvas shadows={false} gl={{ antialias: true, alpha: false }}>
-          <color attach="background" args={['#1a1a2e']} />
+        <Canvas shadows={false} gl={{ antialias: true, alpha: false, preserveDrawingBuffer:true }} dpr={[1,1.5]}>
+          <color attach="background" args={[viewMode==='walkthrough'?'#dce7ec':'#1a1a2e']} />
 
           <Suspense fallback={null}>
             <CameraController key={viewMode} />
             {viewMode === 'walkthrough' && <WalkthroughCamera />}
             <House3D />
+            <TourRecorder/>
           </Suspense>
         </Canvas>
       </div>
@@ -45,7 +48,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-white font-bold text-lg leading-tight">ArchViz Pro</h1>
-            <p className="text-white/60 text-xs">Professional Architectural Visualization</p>
+            <p className="text-white/60 text-xs">Visualización y diseño de interiores</p>
           </div>
         </div>
 
@@ -53,7 +56,7 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur rounded-full">
               <Layers className="w-3.5 h-3.5 text-blue-400" />
-              <span className="text-white/80 text-xs">{furniture.length} items</span>
+              <span className="text-white/80 text-xs">{furniture.length} muebles</span>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur rounded-full">
               <MousePointer className="w-3.5 h-3.5 text-green-400" />
@@ -61,7 +64,7 @@ export default function App() {
             </div>
           </div>
         )}
-        {projectId && <button className="text-white text-xs border border-white/30 rounded px-3 py-2" onClick={()=>{if(useProjectStore.getState().dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y abrir otro archivo?'))return;useProjectStore.getState().clearProject();try{localStorage.removeItem('archviz-project')}catch{/* optional */}}}>Importar otro archivo</button>}
+        {projectId && <button disabled={recording} className="text-white text-xs border border-white/30 rounded px-3 py-2" onClick={()=>{if(useProjectStore.getState().dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y abrir otro archivo?'))return;useProjectStore.getState().clearProject();try{localStorage.removeItem('archviz-project')}catch{/* optional */}}}>Importar otro archivo</button>}
       </header>
       <ProjectReview />
 
@@ -95,14 +98,8 @@ export default function App() {
         </div>
       </div>
 
-      {projectId && viewMode === 'walkthrough' && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-black/70 backdrop-blur text-white px-4 py-2 rounded-full text-xs">
-          Use <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-[10px] mx-1">W</kbd>
-          <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-[10px] mx-1">A</kbd>
-          <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-[10px] mx-1">S</kbd>
-          <kbd className="px-1.5 py-0.5 bg-white/20 rounded text-[10px] mx-1">D</kbd> to move • Click <strong>Play Tour</strong> for cinematic mode
-        </div>
-      )}
+      {projectId && viewMode === 'walkthrough' && <WalkingControls/>}
+
     </div>
   )
 }
