@@ -91,6 +91,7 @@ def test_preparation_checks_disable_tty_for_piped_input(tmp_path, monkeypatch):
             options=command[command.index('run')+1:]
             assert '-T' in options, 'Compose would require a TTY with piped stdin'
             assert '--rm' in options and '--no-deps' in options
+            assert kwargs.get('stdin')==module.subprocess.DEVNULL, 'Compose must not consume the activation command from a pasted bash script'
             checks.append(options)
             return b'<html>compiled frontend</html>'
 

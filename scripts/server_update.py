@@ -162,8 +162,8 @@ def prepare(args):
         'from app.services.architectural_pdf import ArchitecturalPDFEngine; '
         'from app.services.cad_geometry import import_dxf; '
         'from app.main import app; assert callable(ArchitecturalPDFEngine().process_pdf); '
-        'print("Motor vectorial y API compatibles: OK")'],check=True)
-    index=subprocess.check_output(release+['run','--rm','-T','--no-deps','frontend','cat','/usr/share/nginx/html/index.html'])
+        'print("Motor vectorial y API compatibles: OK")'],check=True,stdin=subprocess.DEVNULL)
+    index=subprocess.check_output(release+['run','--rm','-T','--no-deps','frontend','cat','/usr/share/nginx/html/index.html'],stdin=subprocess.DEVNULL)
     state['frontend_index_sha256']=hashlib.sha256(index).hexdigest()
     state['ready']=True
     save(state)
