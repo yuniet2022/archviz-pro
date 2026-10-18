@@ -10,3 +10,4 @@ data/
 *.sqlite3*
 deployment.override.json
 deployment.state.json
+deployment.compose.json

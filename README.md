@@ -128,7 +128,9 @@ Desde la carpeta nueva descargada, ajustando la ruta del respaldo:
 python3 scripts/server_update.py prepare --base /opt/archviz-pro --backup /root/archviz-respaldo-AAAAmmdd-HHMMSS --project archviz-pro
 ```
 
-La preparación copia el motor vectorial completo de la instalación activa a la carpeta nueva, conserva sus bytes y registra su SHA-256. Genera un override de Compose que conserva la configuración de base, los datos, las conexiones a la base de datos y el trabajador actual. Añade la API y el frontend nuevos con imágenes separadas, y conserva `pipeline` como referencia montada en modo lectura. Las compilaciones se ejecutan una a una para reducir la presión de memoria en el servidor de 2 GB. No sustituye todavía los servicios activos.
+La preparación copia el motor vectorial completo de la instalación activa a la carpeta nueva, conserva sus bytes y registra su SHA-256. Lee la configuración normalizada de Compose y genera una configuración completa que conserva los datos, las conexiones a la base de datos y el trabajador actual. Así evita la incompatibilidad al combinar listas y diccionarios de `depends_on` en Compose 2.24. Añade la API y el frontend nuevos con imágenes separadas, y conserva `pipeline` como referencia montada en modo lectura. Las compilaciones se ejecutan una a una para reducir la presión de memoria en el servidor de 2 GB. No sustituye todavía los servicios activos.
+
+`deployment.compose.json` puede incluir variables privadas resueltas por Compose: se crea con permisos 0600, se excluye de Git y no debe compartirse. Se conservan los escapes de interpolación que produce Compose para que los valores con `$` no cambien al leer de nuevo la configuración. El frontend nuevo sirve únicamente los archivos compilados en su imagen, sin heredar montajes de `dist`, puertos o perfiles del antiguo servicio de compilación.
 
 Cuando termine con `PREPARACIÓN COMPLETADA`:
 
@@ -136,7 +138,7 @@ Cuando termine con `PREPARACIÓN COMPLETADA`:
 python3 scripts/server_update.py activate
 ```
 
-La activación comprueba que el motor y las configuraciones originales no hayan cambiado desde la preparación. Actualiza backend/frontend/Nginx y verifica la identificación de la API y el hash del HTML compilado. Si falla, vuelve a levantar backend y Nginx con la configuración original. Para volver atrás manualmente:
+La activación comprueba que el motor, las configuraciones originales y la configuración preparada no hayan cambiado desde la preparación. Actualiza backend/frontend/Nginx y verifica la identificación de la API y el hash del HTML compilado. Si falla, vuelve a levantar backend y Nginx con la configuración original. Para volver atrás manualmente:
 
 ```sh
 python3 scripts/server_update.py rollback
