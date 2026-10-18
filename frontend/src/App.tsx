@@ -27,7 +27,7 @@ export default function App() {
   return (
     <div className="relative w-screen h-screen bg-gray-900 overflow-hidden">
       <div className="absolute inset-0">
-        <Canvas shadows gl={{ antialias: true, alpha: false }}>
+        <Canvas shadows={false} gl={{ antialias: true, alpha: false }}>
           <color attach="background" args={['#1a1a2e']} />
           <fog attach="fog" args={['#1a1a2e', 20, 60]} />
 

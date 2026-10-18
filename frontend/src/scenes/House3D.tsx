@@ -45,7 +45,7 @@ function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
   }
   return <group position={[position[0],0,position[2]]} rotation={rotation}
     onClick={e=>{e.stopPropagation();useProjectStore.setState({selectedElementId:id})}}>
-    {pieces.map((piece,i)=><mesh key={i} position={[0,(piece.low+piece.high)/2,(piece.from+piece.to)/2-length/2]} castShadow receiveShadow>
+    {pieces.map((piece,i)=><mesh key={i} position={[0,(piece.low+piece.high)/2,(piece.from+piece.to)/2-length/2]}>
       <boxGeometry args={[thickness,piece.high-piece.low,piece.to-piece.from]}/>
       <meshStandardMaterial color={selected?'#18b9d8':'#f5f5f0'} roughness={.9}/>
     </mesh>)}
@@ -70,7 +70,7 @@ function FloorMesh({ points }: { points: [number, number, number][] }) {
   }, [points])
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
       <shapeGeometry args={[shape]} />
       <meshStandardMaterial color="#d4a574" roughness={0.6} side={THREE.DoubleSide} />
     </mesh>
@@ -86,20 +86,20 @@ function FurnitureMesh({ item }: { item: any }) {
       case 'seating':
         return (
           <group>
-            <mesh position={[0, h*0.2, 0]} castShadow>
+            <mesh position={[0, h*0.2, 0]}>
               <boxGeometry args={[w, h*0.4, d]} />
               <meshStandardMaterial color={color} roughness={0.8} />
             </mesh>
-            <mesh position={[0, h*0.6, -d*0.35]} castShadow>
+            <mesh position={[0, h*0.6, -d*0.35]}>
               <boxGeometry args={[w, h*0.6, d*0.1]} />
               <meshStandardMaterial color={color} roughness={0.8} />
             </mesh>
-            <mesh position={[0, h*0.45, 0]} castShadow>
+            <mesh position={[0, h*0.45, 0]}>
               <boxGeometry args={[w*0.9, h*0.1, d*0.9]} />
               <meshStandardMaterial color={color} roughness={0.9} />
             </mesh>
             {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([lx, lz], i) => (
-              <mesh key={i} position={[lx * w*0.4, 0, lz * d*0.4]} castShadow>
+              <mesh key={i} position={[lx * w*0.4, 0, lz * d*0.4]}>
                 <cylinderGeometry args={[0.02, 0.015, h*0.2, 8]} />
                 <meshStandardMaterial color="#8B4513" metalness={0.3} />
               </mesh>
@@ -109,21 +109,21 @@ function FurnitureMesh({ item }: { item: any }) {
       case 'bed':
         return (
           <group>
-            <mesh position={[0, h*0.3, 0]} castShadow>
+            <mesh position={[0, h*0.3, 0]}>
               <boxGeometry args={[w, h*0.3, d]} />
               <meshStandardMaterial color="#f0f0f0" roughness={0.9} />
             </mesh>
-            <mesh position={[0, h*0.6, -d*0.45]} castShadow>
+            <mesh position={[0, h*0.6, -d*0.45]}>
               <boxGeometry args={[w, h*0.6, d*0.08]} />
               <meshStandardMaterial color={color} roughness={0.7} />
             </mesh>
             {[-0.3, 0.3].map((x, i) => (
-              <mesh key={i} position={[x, h*0.5, -d*0.25]} castShadow>
+              <mesh key={i} position={[x, h*0.5, -d*0.25]}>
                 <boxGeometry args={[w*0.25, h*0.15, d*0.15]} />
                 <meshStandardMaterial color="#ffffff" roughness={1} />
               </mesh>
             ))}
-            <mesh position={[0, h*0.1, 0]} castShadow>
+            <mesh position={[0, h*0.1, 0]}>
               <boxGeometry args={[w, h*0.15, d]} />
               <meshStandardMaterial color={color} roughness={0.6} />
             </mesh>
@@ -132,12 +132,12 @@ function FurnitureMesh({ item }: { item: any }) {
       case 'table':
         return (
           <group>
-            <mesh position={[0, h*0.45, 0]} castShadow>
+            <mesh position={[0, h*0.45, 0]}>
               <boxGeometry args={[w, h*0.05, d]} />
               <meshStandardMaterial color={color} roughness={0.5} />
             </mesh>
             {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([lx, lz], i) => (
-              <mesh key={i} position={[lx * w*0.4, h*0.2, lz * d*0.4]} castShadow>
+              <mesh key={i} position={[lx * w*0.4, h*0.2, lz * d*0.4]}>
                 <boxGeometry args={[0.05, h*0.4, 0.05]} />
                 <meshStandardMaterial color={color} roughness={0.5} />
               </mesh>
@@ -146,7 +146,7 @@ function FurnitureMesh({ item }: { item: any }) {
         )
       default:
         return (
-          <mesh castShadow>
+          <mesh>
             <boxGeometry args={[w, h, d]} />
             <meshStandardMaterial color={color} roughness={0.7} />
           </mesh>
@@ -188,12 +188,10 @@ export default function House3D() {
       <directionalLight 
         position={[10, 20, 10]} 
         intensity={1.5} 
-        castShadow 
-        shadow-mapSize={[2048, 2048]}
       />
       <pointLight position={[-10, 10, -10]} intensity={0.5} color="#ffd4a3" />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
         <planeGeometry args={[100, 100]} />
         <meshStandardMaterial color="#e0e0e0" />
       </mesh>
@@ -211,7 +209,7 @@ export default function House3D() {
         />
       ))}
 
-      {floorPlan?.columns.map(column=><mesh key={column.id} position={[column.position.x,column.height/2,column.position.z]} castShadow receiveShadow
+      {floorPlan?.columns.map(column=><mesh key={column.id} position={[column.position.x,column.height/2,column.position.z]}
         onClick={e=>{e.stopPropagation();useProjectStore.setState({selectedElementId:column.id})}}>
         <boxGeometry args={[column.width,column.height,column.depth]}/><meshStandardMaterial color={selectedElementId===column.id?'#18b9d8':'#c79a51'}/>
       </mesh>)}
