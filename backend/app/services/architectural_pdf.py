@@ -156,6 +156,9 @@ class ArchitecturalPDFEngine:
             page=doc[0];drawings=page.get_drawings();labels=text_lines(page)
             tables=schedules(labels)
             self.tables=tables
+            self.door_notes=[(r,t,size) for r,t,_ in labels
+                             if (match:=re.search(r'(?<!\d)(\d{4,5})\s*(?:DR\.?|DOOR)',t,re.I))
+                             and (size:=door_size(match.group(1)))]
             all_axes=[s for d in drawings for a,b in drawing_lines(d) if (s:=axis(a,b))]
             scale=calibration(all_axes,labels)
             legacy=VectorEngine();h,v,words=legacy._extract(page)
@@ -302,7 +305,12 @@ class ArchitecturalPDFEngine:
                 thickness=t.c-s.c
                 if not self.scale*.22<=thickness<=self.scale*1.1:continue
                 a,b=max(s.a,t.a),min(s.b,t.b)
-                if b-a<self.scale*.35:continue
+                if b-a<self.scale*.35:
+                    # Small jamb stubs still support narrow linen/closet doors.
+                    midpoint=((a+b)/2,(s.c+t.c)/2) if s.o=='H' else ((s.c+t.c)/2,(a+b)/2)
+                    near_note=any(math.hypot((r.x0+r.x1)/2-midpoint[0],(r.y0+r.y1)/2-midpoint[1])<self.scale*2
+                                  for r,_,_ in self.door_notes)
+                    if b-a<self.scale*.15 or not near_note:continue
                 c=(s.c+t.c)/2;positions,support=self._support(s.o,c,a,b)
                 for offset in (-.32,.32):
                     _,side=self._support(s.o,c+thickness*offset,a,b)
@@ -311,8 +319,8 @@ class ArchitecturalPDFEngine:
                 # Split at unhatched openings; do not fill windows with solid walls.
                 if support.mean()>.65 and support.any():
                     first,last=np.flatnonzero(support)[[0,-1]]
-                    if positions[first]-a<self.scale*3:support[:first]=True
-                    if b-positions[last]<self.scale*3:support[last:]=True
+                    if positions[first]-a<self.scale*3 and not self._annotated_door(s.o,c,a,positions[first]):support[:first]=True
+                    if b-positions[last]<self.scale*3 and not self._annotated_door(s.o,c,positions[last],b):support[last:]=True
                 support=cv2.morphologyEx(support.astype(np.uint8)[None,:],cv2.MORPH_CLOSE,np.ones((1,max(3,int(self.scale*.3))),np.uint8)).ravel().astype(bool)
                 run=None
                 for index,covered in enumerate([*support,False]):
@@ -333,6 +341,13 @@ class ArchitecturalPDFEngine:
                     overlap=True;break
             if not overlap:kept.append(s)
         return self._merge_solids(kept)
+
+    def _annotated_door(self,orientation,c,a,b):
+        """Do not extend hatch over an unhatched gap supported by a door note."""
+        cx,cy=((a+b)/2,c) if orientation=='H' else (c,(a+b)/2)
+        return any(abs((b-a)-size[0]/FT*self.scale)<self.scale*.65
+                   and math.hypot((r.x0+r.x1)/2-cx,(r.y0+r.y1)/2-cy)<self.scale*2
+                   for r,_,size in self.door_notes)
 
     def _merge_solids(self,solids):
         result=[]
@@ -465,7 +480,8 @@ class ArchitecturalPDFEngine:
                 if not m or not (size:=door_size(m.group(1))):continue
                 if abs(size[0]/FT*self.scale-span)>self.scale*.65:continue
                 if math.hypot((r.x0+r.x1)/2-cx,(r.y0+r.y1)/2-cy)>self.scale*2.5:continue
-                if (abs(direction[0])>.9)!=(s.o=='H'):continue
+                # Door notes can run along a neighbouring wall, not the opening.
+                # Width and proximity, rather than text rotation, locate the gap.
                 candidates.append(s);break
         for s in candidates:
             duplicate=any(w.o==s.o and abs(w.c-s.c)<self.scale*.18 and min(w.b,s.b)-max(w.a,s.a)>min(w.b-w.a,s.b-s.a)*.7 for w in walls)

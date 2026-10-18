@@ -13,7 +13,7 @@ from app.services.cad_geometry import import_dxf
 from app.services.plan_export import dxf_plan
 
 
-def hatched_pdf():
+def hatched_pdf(end_door=False, linen_door=False):
     doc=fitz.open();p=doc.new_page(width=900,height=750)
     def strip(x0,y0,x1,y1):
         r=fitz.Rect(x0,y0,x1,y1);p.draw_rect(r,width=.5)
@@ -23,7 +23,16 @@ def hatched_pdf():
             if hi>lo:p.draw_line((lo,lo+intercept),(hi,hi+intercept),color=(.7,.7,.7),width=.4)
     for rect in [(95,95,300,105),(360,95,705,105),(695,100,705,605),
                  (395,595,700,605),(395,500,405,600),(95,495,400,505),(95,100,105,500),
-                 (395,100,405,300),(395,360,405,500)]:strip(*rect)
+                 (395,100,405,300),(395,360,405,500)]:
+        if end_door and rect==(395,100,405,300):continue
+        strip(*rect)
+    if end_door:
+        strip(400,295,700,305)
+        p.insert_text((417,337),'3080 DR.',fontsize=8)
+    if linen_door:
+        strip(497,415,503,419)
+        strip(497,445.6667,503,449.6667)
+        p.insert_text((485,444),'1480 DR.',fontsize=6,rotate=90)
     # One exterior window, one internal door and an unhatched kitchen fixture.
     for y in (97,100,103):p.draw_line((300,y),(360,y),width=.4)
     p.draw_line((400,300),(460,300),width=.5)
@@ -56,6 +65,31 @@ def test_hatches_reject_fixture_walls_keep_window_and_l_shaped_floor(tmp_path):
     minx,minz,maxx,maxz=polygon.bounds
     assert polygon.area < (maxx-minx)*(maxz-minz)*.95
     assert polygon.is_valid
+
+
+def test_door_note_rotation_does_not_remove_partition_end_door(tmp_path):
+    path=tmp_path/'end-door.pdf';path.write_bytes(hatched_pdf(end_door=True))
+    plan=ArchitecturalPDFEngine().process_pdf(path)
+    candidates=[]
+    for door in plan.doors:
+        wall=next(w for w in plan.walls if w.id==door.wall_id)
+        a,b=wall.source['pdf_points']
+        if abs(a[0]-400)<1 and abs(b[0]-400)<1 and door.source['kind']=='door_size_label_at_partition_end':
+            candidates.append(door)
+    assert candidates
+    assert any(door.width==pytest.approx(.9144,abs=.05) for door in candidates)
+
+
+def test_narrow_linen_door_with_short_jamb_stubs_is_kept(tmp_path):
+    path=tmp_path/'linen-door.pdf';path.write_bytes(hatched_pdf(linen_door=True))
+    plan=ArchitecturalPDFEngine().process_pdf(path)
+    candidates=[]
+    for door in plan.doors:
+        wall=next(w for w in plan.walls if w.id==door.wall_id)
+        a,b=wall.source['pdf_points']
+        if abs(a[0]-500)<1 and abs(b[0]-500)<1:candidates.append(door)
+    assert len(candidates)==1
+    assert candidates[0].width==pytest.approx(.4064,abs=.03)
 
 
 def save_dxf(tmp_path,doc):
