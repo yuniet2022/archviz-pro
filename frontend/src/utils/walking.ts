@@ -34,6 +34,17 @@ export function walkable(x:number,z:number,plan:FloorPlan,furniture:Furniture[],
       if(Math.abs(localX)<c.width/2+radius&&Math.abs(localZ)<c.depth/2+radius)return false
     }
   }
+  for(const fixture of plan.fixtures??[]) {
+    if(fixture.outline.length>=3) {
+      if(inside(x,z,fixture.outline))return false
+      for(let i=0;i<fixture.outline.length;i++) {
+        const a=fixture.outline[i],b=fixture.outline[(i+1)%fixture.outline.length]
+        const dx=b.x-a.x,dz=b.z-a.z,length=dx*dx+dz*dz
+        const t=length?Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/length)):0
+        if(Math.hypot(x-a.x-dx*t,z-a.z-dz*t)<radius)return false
+      }
+    }
+  }
   for(const f of furniture) {
     const [w,h,d]=f.dimensions??[1,1,1]
     if(f.model==='rug'||h*f.scale[1]<=.06)continue

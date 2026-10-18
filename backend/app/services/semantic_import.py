@@ -10,7 +10,7 @@ from app.services.architectural_pdf import ArchitecturalPDFEngine
 def pdf_engine_recipe(mode: str):
     if mode not in ('vector', 'raster'):
         raise ValueError('Modo PDF inválido')
-    modules = ['architectural_pdf.py','vector_engine.py','semantic_import.py'] if mode == 'vector' else ['semantic_import.py','plan_processor.py']
+    modules = ['architectural_pdf.py','vector_engine.py','semantic_import.py','plan_fixtures.py'] if mode == 'vector' else ['semantic_import.py','plan_processor.py']
     content=b''.join(Path(__file__).with_name(name).read_bytes() for name in modules)
     return {'mode':mode, 'sha256':hashlib.sha256(content).hexdigest()}
 
@@ -38,6 +38,14 @@ def import_vector_pdf(path: str, page_number: int):
                 isolated = str(Path(temp)/'selected.pdf')
                 single_page.save(isolated)
                 result = ArchitecturalPDFEngine().process_pdf(isolated)
+        from app.services.plan_fixtures import extract_pdf_fixtures
+        from shapely.errors import GEOSException
+        try:
+            result.fixtures,fixture_warnings=extract_pdf_fixtures(selected,result)
+        except (ValueError,GEOSException):
+            result.fixtures=[]
+            fixture_warnings=['Se conservó la geometría de la casa; los símbolos de equipos no pudieron cerrarse y requieren colocación manual.']
+        result.fixture_status={'engine':1,'status':'detected' if result.fixtures else 'not_detected','warnings':fixture_warnings}
     result.warnings.append('Escala y alturas propuestas por el motor vectorial: confirmar con cotas y alzados antes de aprobar.')
     return result
 

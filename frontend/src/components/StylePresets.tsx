@@ -8,10 +8,10 @@ import { currentPlan, furnitureFromModel, interiorError, moveFurniture } from '.
 type CatalogItem={model:string;name:string;category:string;dimensions:Point}
 
 export default function StylePresets() {
-  const {floorPlan,furniture,selectedStyle,selectedFurnitureId,activePanel,recording,placementMode,interiorMessage}=useProjectStore()
+  const {floorPlan,furniture,selectedStyle,selectedFurnitureId,selectedFixtureId,activePanel,recording,placementMode,interiorMessage}=useProjectStore()
   const [styles,setStyles]=useState<InteriorStyle[]>([])
   const [catalog,setCatalog]=useState<CatalogItem[]>([])
-  const [tab,setTab]=useState<'styles'|'choice'|'catalog'|'edit'|'auto'>('styles')
+  const [tab,setTab]=useState<'styles'|'choice'|'catalog'|'edit'|'auto'|'fixtures'>('styles')
   const [roomId,setRoomId]=useState('')
   const [busy,setBusy]=useState(false)
   const [search,setSearch]=useState('')
@@ -27,20 +27,37 @@ export default function StylePresets() {
   },[])
   useEffect(()=>{setDraft(selected?{...selected}:null)},[selected])
   useEffect(()=>{if(selectedFurnitureId)setTab('edit')},[selectedFurnitureId])
+  useEffect(()=>{if(selectedFixtureId)setTab('fixtures')},[selectedFixtureId])
   useEffect(()=>{if(roomId&&!floorPlan?.rooms.some(r=>r.id===roomId))setRoomId('')},[floorPlan,roomId])
   if(!floorPlan)return null
   const open=activePanel==='furniture'
   const style=styles.find(s=>s.id===selectedStyle)
-  const chooseStyle=(value:InteriorStyle)=>{
+  const fixed=(floorPlan.fixtures??[]).find(item=>item.id===selectedFixtureId)
+  const chooseStyle=(value:InteriorStyle)=>run(async()=>{
     const state=useProjectStore.getState()
     if(!state.floorPlan)return
+    const signature=JSON.stringify(currentPlan()),projectId=state.projectId
+    let plan=state.floorPlan
+    if(!plan.fixtures?.length&&!plan.fixture_status) {
+      const response=await axios.post('/api/v1/furnish/fixtures',{project_id:projectId,floor_plan:currentPlan()})
+      if(useProjectStore.getState().projectId!==projectId)return
+      if(JSON.stringify(currentPlan())!==signature)throw new Error('El plano cambió mientras se leían sus equipos. Vuelve a elegir el estilo.')
+      plan={...plan,fixtures:response.data.fixtures,fixture_status:response.data.status}
+    }
     const changed=state.furniture.map(item=>({...item,style:value.id,
       color:item.model==='plant'?'#4e7651':item.material==='fabric'?value.fabric:
         item.material==='wood'?value.wood:item.color}))
-    useProjectStore.setState({selectedStyle:value.id,floorPlan:{...state.floorPlan,interior_style:value},
-      furniture:changed,dirty:true,interiorMessage:`Estilo ${value.name} aplicado. Se conserva la distribución.`})
+    const fixtures=(plan.fixtures??[]).map(item=>{
+      const cabinet=['vanity','counter','island'].includes(item.kind)
+      return {...item,style:value.id,material:cabinet?'wood_stone':item.kind==='toilet'?'ceramic':'metal',
+        color:cabinet?value.wood:item.kind==='toilet'?'#edf0e9':'#ced4d1',
+        finishes:cabinet?{cabinet_color:value.wood,countertop_color:value.id==='industrial'?'#999a96':'#ece9df'}:{}}
+    })
+    useProjectStore.setState({selectedStyle:value.id,floorPlan:{...plan,fixtures,interior_style:value},
+      furniture:changed,dirty:true,tour:null,isPlaying:false,
+      interiorMessage:`Estilo ${value.name} aplicado. ${(plan.fixtures??[]).length} equipos recuperados del plano. ${(plan.fixture_status?.warnings??[]).join(' ')}`})
     setTab('choice')
-  }
+  })
   const run=async(action:()=>Promise<void>)=>{
     setBusy(true);message('')
     try{await action()}catch(error){message(interiorError(error))}finally{setBusy(false)}
@@ -84,7 +101,7 @@ export default function StylePresets() {
       <div className="flex items-center justify-between"><h2 className="font-bold flex gap-2 items-center"><Armchair size={18}/>Diseño de interiores</h2>
         <button aria-label="Cerrar diseño de interiores" onClick={()=>useProjectStore.setState({activePanel:null})}><X size={18}/></button></div>
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 text-xs">
-        {([['styles','Estilos'],['catalog','Manual'],['auto','Asistente'],['edit','Editar mueble']] as const).map(([value,label])=><button key={value} onClick={()=>setTab(value)} className={`flex-1 p-2 rounded ${tab===value?'bg-white font-semibold':''}`}>{label}</button>)}
+        {([['styles','Estilos'],['catalog','Manual'],['auto','Asistente'],['edit','Editar'],['fixtures','Equipos']] as const).map(([value,label])=><button key={value} onClick={()=>setTab(value)} className={`flex-1 p-2 rounded ${tab===value?'bg-white font-semibold':''}`}>{label}</button>)}
       </div>
       <fieldset disabled={busy||recording} className="space-y-3 disabled:opacity-60">
         {tab==='styles'&&<>
@@ -98,6 +115,32 @@ export default function StylePresets() {
           <button disabled={!style} onClick={()=>setTab('catalog')} className="border border-blue-600 text-blue-700 p-3 rounded-xl text-sm font-semibold disabled:opacity-40">Decorar yo<span className="block text-[11px] font-normal mt-1">Elegir y colocar cada mueble</span></button>
           <button disabled={!style} onClick={()=>setTab('auto')} className="bg-blue-600 text-white p-3 rounded-xl text-sm font-semibold disabled:opacity-40">Decorar automáticamente<span className="block text-[11px] font-normal mt-1">Propuesta según estilo y medidas</span></button>
         </div></>}
+        {tab==='fixtures'&&<>
+          <h3 className="text-sm font-semibold">Baños, mesetas y cocina del plano</h3>
+          <p className="text-xs text-gray-500">Los equipos conservan sus contornos y posiciones. El estilo cambia sus acabados.</p>
+          <select aria-label="Equipo fijo seleccionado" value={selectedFixtureId} onChange={e=>useProjectStore.setState({selectedFixtureId:e.target.value,selectedFurnitureId:''})} className="border rounded-lg p-2 w-full text-xs">
+            <option value="">Seleccionar equipo del plano</option>{(floorPlan.fixtures??[]).map((item,i)=><option key={item.id} value={item.id}>{item.name} · {floorPlan.rooms.find(room=>room.id===item.room_id)?.name??'Plano'} · {i+1}</option>)}
+          </select>
+          {!floorPlan.fixtures?.length&&<p className="text-xs text-amber-800">No se reconocieron equipos fijos. Puedes añadir piezas manualmente desde el catálogo.</p>}
+          {fixed&&<>
+            <p className="text-xs text-gray-600">{fixed.dimensions.x.toFixed(2)} × {fixed.dimensions.z.toFixed(2)} m en planta</p>
+            {fixed.kind==='vanity'&&<>
+              <p className="text-xs">Dibujo original: {fixed.source_basin_count===2?'lavamanos doble':'lavamanos sencillo'}.</p>
+              <label className="text-xs block">Variante de lavamanos<select aria-label="Variante de lavamanos" value={fixed.basin_count} onChange={e=>{
+                const count=Number(e.target.value),original=count===fixed.source_basin_count
+                const centers=original?fixed.source_basin_centers:Array.from({length:count},(_,i)=>{
+                  const offset=count===1?0:(i-.5)*fixed.dimensions.x*.5
+                  return {x:fixed.position.x+Math.cos(fixed.rotation.y)*offset,y:fixed.dimensions.y,z:fixed.position.z-Math.sin(fixed.rotation.y)*offset}
+                })
+                const sizes=original?fixed.source_basin_sizes:Array.from({length:count},()=>({x:Math.min(.52,fixed.dimensions.x/(count+1)),y:0,z:Math.min(.42,fixed.dimensions.z*.72)}))
+                useProjectStore.setState({floorPlan:{...floorPlan,fixtures:(floorPlan.fixtures??[]).map(item=>item.id===fixed.id?{...item,basin_count:count,basin_centers:centers,basin_sizes:sizes,design_variant:!original}:item)},dirty:true,
+                  interiorMessage:original?'Se recuperó el lavamanos dibujado en el plano.':'Variante de diseño aplicada sobre la misma meseta. Revisa la adaptación de grifería y desagües.'})
+              }} className="block border rounded-lg p-2 w-full mt-1"><option value="1">Sencillo</option><option value="2" disabled={fixed.dimensions.x<1.2&&fixed.source_basin_count!==2}>Doble{fixed.dimensions.x<1.2&&fixed.source_basin_count!==2?' · meseta insuficiente':''}</option></select></label>
+              {fixed.basin_count!==fixed.source_basin_count&&<p className="text-xs text-amber-800">Variante elegida por el cliente; el archivo conserva el dibujo original como referencia.</p>}
+            </>}
+            {fixed.kind==='island'&&<p className="text-xs">Fregadero de {fixed.source_basin_count} cubetas según el plano. La meseta conserva el espacio del lavavajillas.</p>}
+          </>}
+        </>}
         {tab==='auto'&&<p className="text-xs text-gray-500">El asistente propone muebles por ambiente, comprueba el suelo y deja libres las puertas. Puedes editar la propuesta después.</p>}
         {(tab==='auto'||tab==='catalog')&&<>
           <label className="block text-xs font-medium">Ambiente<select aria-label="Ambiente para muebles" value={roomId} onChange={e=>setRoomId(e.target.value)} className="block border rounded-lg w-full mt-1 p-2">

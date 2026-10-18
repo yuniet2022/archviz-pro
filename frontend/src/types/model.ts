@@ -15,6 +15,15 @@ export interface InteriorStyle {
 export interface TourPlan {
   points: Point[]; stops: {name:string; point:Point}[]; distance_m:number; warnings:string[]
 }
+export interface FixedFixture {
+  id:string; name:string; kind:'vanity'|'toilet'|'island'|'counter'|'cooktop'|'dishwasher'|'fridge'
+  position:Point; rotation:Point; dimensions:Point; scale:Point
+  outline:Point[]; body_outline:Point[];top_outline:Point[];basin_count:number; source_basin_count:number
+  basin_centers:Point[]; source_basin_centers:Point[]; basin_sizes:Point[]
+  source_basin_sizes:Point[]
+  source_basin_outlines:Point[][]
+  room_id?:string; parent_id?:string; [key:string]:unknown
+}
 export interface FloorPlan {
   walls: ModelWall[]; columns: ModelColumn[]; doors: Opening[]; windows: Opening[]
   rooms: ModelRoom[]; dimensions: Record<string, number>; warnings: string[]
@@ -22,6 +31,8 @@ export interface FloorPlan {
   interior_style?: InteriorStyle
   tour_waypoints?: Point[]
   tour_settings?: {duration:number;quality:'720p'|'1080p'}
+  fixtures?: FixedFixture[]
+  fixture_status?: {engine:number;status:string;warnings:string[]}
   architectural_info: ArchitecturalInfo; [key: string]: unknown
 }
 export interface LearningInfo { reused: boolean; contributing: boolean; trained_model: boolean }

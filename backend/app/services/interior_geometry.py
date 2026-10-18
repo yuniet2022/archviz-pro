@@ -52,6 +52,11 @@ def structural_obstacles(plan):
             shape=rotate(box(-column.width/2,-column.depth/2,column.width/2,column.depth/2),
                          -column.rotation,use_radians=True)
             solids.append(translate(shape,column.position.x,column.position.z))
+    for fixture in plan.fixtures:
+        if fixture.outline:
+            solids.append(Polygon([(p.x,p.z) for p in fixture.outline]))
+        else:
+            solids.append(footprint(fixture))
     return unary_union(solids)
 
 

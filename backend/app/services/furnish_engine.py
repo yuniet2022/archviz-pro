@@ -161,6 +161,8 @@ class FurnishEngine:
                         point=Point(table.position.x+c*dx+s*dz,table.position.z-s*dx+c*dz)
                         place('dining_chair',point,polygon.intersection(point.buffer(.4)),room.id,table.rotation.y+turn)
             elif kind=='kitchen':
+                if any(f.kind in ('island','counter','cooktop') and polygon.buffer(.1).intersects(footprint(f)) for f in plan.fixtures):
+                    continue
                 island=place('island',anchor,polygon,room.id)
                 if island:
                     for dx in (-.45,.45):
@@ -170,8 +172,11 @@ class FurnishEngine:
                 place('fridge',anchor,polygon,room.id,primary=True)
                 place('range',anchor,polygon,room.id,primary=True)
             elif kind=='bathroom':
-                place('toilet',anchor,polygon,room.id,primary=True)
-                place('vanity',anchor,polygon,room.id,primary=True)
+                # Plumbing is recovered from the drawing, never positioned by
+                # the decoration heuristic merely because the room is a bath.
+                if not any(f.kind in ('toilet','vanity') and polygon.buffer(.15).intersects(footprint(f)) for f in plan.fixtures):
+                    warnings.append(f'{room.name}: sitúa los sanitarios desde el plano, antes de decorar este ambiente.')
+                continue
             elif kind=='laundry':
                 place('washer',anchor,polygon,room.id,primary=True)
             elif kind=='closet':

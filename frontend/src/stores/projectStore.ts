@@ -44,6 +44,7 @@ export interface ProjectState {
   learning: LearningInfo | null
   selectedElementId: string
   selectedFurnitureId: string
+  selectedFixtureId: string
   placementMode: boolean
   tourPointMode: boolean
   interiorMessage: string
@@ -85,6 +86,7 @@ export const useProjectStore = create<ProjectState>((set,get) => ({
   learning: null,
   selectedElementId: '',
   selectedFurnitureId: '',
+  selectedFixtureId: '',
   placementMode: false,
   tourPointMode: false,
   interiorMessage: '',
@@ -129,7 +131,7 @@ export const useProjectStore = create<ProjectState>((set,get) => ({
     walls: [],
     furniture: [],
     selectedStyle: null,
-    selectedFurnitureId:'', selectedElementId:'', placementMode:false, tourPointMode:false,interiorMessage:'',activePanel:null,
+    selectedFurnitureId:'',selectedFixtureId:'',selectedElementId:'', placementMode:false, tourPointMode:false,interiorMessage:'',activePanel:null,
     tour:null, isPlaying:false, tourProgress:0, recording:false, recordingError:'',videoResult:null,
     walkInput:{forward:0,turn:0}
   })}

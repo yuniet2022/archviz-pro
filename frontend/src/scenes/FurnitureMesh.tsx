@@ -2,7 +2,7 @@ import { RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { useProjectStore, type Furniture } from '../stores/projectStore'
 
-export default function FurnitureMesh({item,woodTexture}:{item:Furniture;woodTexture:THREE.Texture}) {
+export default function FurnitureMesh({item,woodTexture,selectable=true}:{item:Furniture;woodTexture:THREE.Texture;selectable?:boolean}) {
   const selected=useProjectStore(s=>s.selectedFurnitureId===item.id)
   const [w,h,d]=item.dimensions??[1,1,1]
   const color=item.color||'#c7b499'
@@ -111,7 +111,7 @@ export default function FurnitureMesh({item,woodTexture}:{item:Furniture;woodTex
     </>
   }
   return <group name={`furniture:${item.id}`} position={item.position} rotation={item.rotation} scale={item.scale}
-    onClick={event=>{event.stopPropagation();const state=useProjectStore.getState();if(state.recording||state.viewMode==='walkthrough'||state.tourPointMode||state.placementMode)return;useProjectStore.setState({selectedFurnitureId:item.id,activePanel:'furniture',placementMode:false,tourPointMode:false})}}>
+    onClick={event=>{if(!selectable)return;event.stopPropagation();const state=useProjectStore.getState();if(state.recording||state.viewMode==='walkthrough'||state.tourPointMode||state.placementMode)return;useProjectStore.setState({selectedFurnitureId:item.id,selectedFixtureId:'',activePanel:'furniture',placementMode:false,tourPointMode:false})}}>
     <group position={[0,-h/2,0]}>{contents}</group>
     {selected&&<mesh position={[0,-h/2+.045,0]} rotation={[-Math.PI/2,0,0]}><planeGeometry args={[w+.10,d+.10]}/><meshBasicMaterial color="#17b9d3" transparent opacity={.25} depthWrite={false}/></mesh>}
   </group>

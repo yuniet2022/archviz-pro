@@ -121,6 +121,38 @@ class FloorRegion(BaseModel):
             raise ValueError('El contorno del suelo no es un polígono válido')
         return self
 
+
+class FixedFixture(FurnitureItem):
+    kind: Literal['vanity','toilet','island','counter','cooktop','dishwasher','fridge']
+    outline: List[Vector3] = Field(default_factory=list, max_length=1000)
+    body_outline: List[Vector3] = Field(default_factory=list, max_length=1000)
+    top_outline: List[Vector3] = Field(default_factory=list, max_length=1000)
+    basin_count: int = Field(default=0, ge=0, le=2)
+    source_basin_count: int = Field(default=0, ge=0, le=2)
+    basin_centers: List[Vector3] = Field(default_factory=list, max_length=2)
+    source_basin_centers: List[Vector3] = Field(default_factory=list, max_length=2)
+    basin_sizes: List[Vector3] = Field(default_factory=list, max_length=2)
+    source_basin_sizes: List[Vector3] = Field(default_factory=list, max_length=2)
+    source_basin_outlines: List[List[Vector3]] = Field(default_factory=list, max_length=2)
+
+    @model_validator(mode='after')
+    def valid_equipment(self):
+        from shapely.geometry import Polygon, Point
+        if any(not .01<=value<=30 for value in (self.dimensions.x,self.dimensions.y,self.dimensions.z)):
+            raise ValueError('Dimensiones de equipo fijo fuera de rango')
+        for ring in (self.outline,self.body_outline,self.top_outline,*self.source_basin_outlines):
+            if ring and (len(ring)<3 or len(ring)>1000 or any(abs(p.y)>1e-6 for p in ring)
+                         or not Polygon([(p.x,p.z) for p in ring]).is_valid):
+                raise ValueError('Contorno de equipo fijo inválido')
+        if self.basin_count!=len(self.basin_centers):
+            raise ValueError('El número de lavamanos no coincide con sus posiciones')
+        if self.kind=='vanity' and self.basin_count==2 and self.source_basin_count!=2 and self.dimensions.x<1.2:
+            raise ValueError('La meseta no tiene ancho suficiente para la variante doble')
+        if self.outline and any(not Polygon([(p.x,p.z) for p in self.outline]).buffer(.005).covers(
+                Point(center.x,center.z)) for center in self.basin_centers):
+            raise ValueError('El lavamanos debe quedar dentro de la meseta')
+        return self
+
 class FloorPlanData(BaseModel):
     model_config = ConfigDict(extra='allow', allow_inf_nan=False)
     walls: List[Wall] = []
@@ -133,6 +165,7 @@ class FloorPlanData(BaseModel):
     warnings: List[str] = Field(default_factory=list, max_length=100)
     architectural_info: ArchitecturalInfo = Field(default_factory=ArchitecturalInfo)
     furniture: List[FurnitureItem] = Field(default_factory=list, max_length=3000)
+    fixtures: List[FixedFixture] = Field(default_factory=list, max_length=1000)
 
     @model_validator(mode='after')
     def valid_geometry(self):

@@ -4,6 +4,7 @@ import { useProjectStore } from '../stores/projectStore'
 import FurnitureMesh from './FurnitureMesh'
 import { moveFurniture, interiorError } from '../utils/interior'
 import type { ModelRoom } from '../types/model'
+import FixedFixtures from './FixedFixtures'
 
 function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
   id: string
@@ -210,6 +211,7 @@ export default function House3D() {
       {furniture.map((item) => (
         <FurnitureMesh key={item.id} item={item} woodTexture={texture}/>
       ))}
+      {floorPlan?.interior_style&&<FixedFixtures woodTexture={texture}/>}
 
       {viewMode!=='walkthrough'&&<gridHelper args={[50, 50, '#cccccc', '#eeeeee']} position={[0, -0.03, 0]} />}
       {viewMode==='top-down'&&(floorPlan?.tour_waypoints??[]).map((p,i)=><mesh key={i} position={[p.x,.08,p.z]} rotation={[-Math.PI/2,0,0]}><circleGeometry args={[.15,24]}/><meshBasicMaterial color="#2463eb"/></mesh>)}

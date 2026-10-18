@@ -97,11 +97,18 @@ export default function ProjectReview() {
     if(!Number.isFinite(factor) || factor<=0 || factor>100) {setMessage('Usa un factor mayor que 0 y hasta 100.');return}
     const current = snapshot(floorPlan,walls)
     const p = (v:{x:number;y:number;z:number})=>({x:v.x*factor,y:v.y*factor,z:v.z*factor})
-    const scaled = {...current,walls:current.walls.map(w=>({...w,start:p(w.start),end:p(w.end),height:w.height*factor,thickness:w.thickness*factor})),
+    const scaled:FloorPlan = {...current,walls:current.walls.map(w=>({...w,start:p(w.start),end:p(w.end),height:w.height*factor,thickness:w.thickness*factor})),
       columns:current.columns.map(c=>({...c,position:p(c.position),width:c.width*factor,depth:c.depth*factor,height:c.height*factor})),
       floor_regions:(current.floor_regions??[]).map(r=>({...r,points:r.points.map(p),holes:r.holes.map(ring=>ring.map(p))})),
+      fixtures:(current.fixtures??[]).map(f=>({...f,position:p(f.position),dimensions:p(f.dimensions),
+        outline:f.outline.map(p),body_outline:(f.body_outline??[]).map(p),top_outline:(f.top_outline??[]).map(p),
+        basin_centers:f.basin_centers.map(p),source_basin_centers:f.source_basin_centers.map(p),
+        basin_sizes:f.basin_sizes.map(p),source_basin_sizes:f.source_basin_sizes.map(p),
+        source_basin_outlines:(f.source_basin_outlines??[]).map(ring=>ring.map(p))})),
       doors:current.doors.map(d=>({...d,width:d.width*factor,height:d.height*factor})),
       windows:current.windows.map(w=>({...w,width:w.width*factor,height:w.height*factor,sill_height:(w.sill_height??0)*factor})),rooms:[]}
+    const transform=current.source_transform as {format?:string;points_per_foot?:number}|undefined
+    if(transform?.format==='pdf'&&typeof transform.points_per_foot==='number')scaled.source_transform={...transform,points_per_foot:transform.points_per_foot/factor}
     useProjectStore.setState({walls:scaled.walls.map(w=>({...w,start:[w.start.x,0,w.start.z],end:[w.end.x,0,w.end.z]})),furniture:[]})
     changed({...scaled,furniture:[]}); setFactor(1); setMessage('Geometría reescalada. Mobiliario retirado; comprueba medidas y vuelve a guardarlo.')
   }

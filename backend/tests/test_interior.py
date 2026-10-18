@@ -37,7 +37,7 @@ def test_non_living_rooms_are_never_filled_with_beds_by_area():
     assert items==[]
     bath=Room(id='bath',name='Master Bath',points=rectangle(0,0,4,4),area_sqm=16)
     plan=FloorPlanData(rooms=[bath]);items,_=FurnishEngine().layout(plan,StylePreset.CLASSIC)
-    assert {item.model for item in items}=={'toilet','vanity'}
+    assert items==[]  # Decoration must not invent plumbing positions from a room name.
 
 
 def test_an_unknown_room_requires_a_use_instead_of_guessing_a_bed():

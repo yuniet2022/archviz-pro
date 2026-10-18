@@ -173,6 +173,12 @@ class ProjectRepository:
         return [{**{k: r[k] for k in ('id', 'revision', 'approved', 'allow_learning', 'measurements_confirmed', 'notes', 'created_at')},
                  'before': json.loads(r['before_json']), 'after': json.loads(r['after_json'])} for r in rows]
 
+    def original_source(self, project_id):
+        self.get(project_id)
+        with self.connection() as db:
+            row=db.execute("SELECT name,sha256,content FROM sources WHERE project_id=? AND role='original' ORDER BY rowid LIMIT 1",(project_id,)).fetchone()
+        return dict(row) if row else None
+
     def archive_snapshot(self, project_id, include_content=True):
         with self.connection() as db:
             db.execute('BEGIN')
