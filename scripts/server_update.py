@@ -156,13 +156,14 @@ def prepare(args):
     # Sequential builds reduce memory pressure on the 2 GB server.
     subprocess.run(release+['build','backend'],check=True)
     subprocess.run(release+['build','frontend'],check=True)
-    subprocess.run(release+['run','--rm','--no-deps','backend','python','-c',
+    # Preparation also runs with stdin piped from a pasted bash heredoc.
+    subprocess.run(release+['run','--rm','-T','--no-deps','backend','python','-c',
         'import fitz; from app.services.vector_engine import VectorEngine; '
         'from app.services.architectural_pdf import ArchitecturalPDFEngine; '
         'from app.services.cad_geometry import import_dxf; '
         'from app.main import app; assert callable(ArchitecturalPDFEngine().process_pdf); '
         'print("Motor vectorial y API compatibles: OK")'],check=True)
-    index=subprocess.check_output(release+['run','--rm','--no-deps','frontend','cat','/usr/share/nginx/html/index.html'])
+    index=subprocess.check_output(release+['run','--rm','-T','--no-deps','frontend','cat','/usr/share/nginx/html/index.html'])
     state['frontend_index_sha256']=hashlib.sha256(index).hexdigest()
     state['ready']=True
     save(state)

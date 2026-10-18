@@ -65,3 +65,42 @@ def test_activation_rejects_changed_resolved_configuration(tmp_path):
     state={'ready':True,'release_config':str(path),'release_config_sha256':'wrong'}
     with pytest.raises(ValueError,match='configuración preparada'):
         module.activate(state,'http://127.0.0.1')
+
+
+def test_preparation_checks_disable_tty_for_piped_input(tmp_path, monkeypatch):
+    module=updater()
+    base=tmp_path/'existing';candidate=tmp_path/'candidate';backup=tmp_path/'backup'
+    for root in (base,candidate):
+        (root/'backend/app/services').mkdir(parents=True)
+    backup.mkdir()
+    for name in ('aplicacion.tar.gz','base-de-datos.sql'):
+        (backup/name).write_bytes(b'backup')
+    (base/'docker-compose.yml').write_text('{}')
+    (base/'nginx.conf').write_text('events {}')
+    engine=base/'backend/app/services/vector_engine.py'
+    engine.write_text('# original engine\n')
+    monkeypatch.setattr(module,'CANDIDATE',candidate)
+    monkeypatch.setattr(module,'STATE',candidate/'deployment.state.json')
+    monkeypatch.setattr(module,'compose_cli',lambda:['docker-compose'])
+    checks=[]
+
+    def compose_call(command, **kwargs):
+        if 'config' in command and '--format' in command:
+            return json.dumps({'services':{'backend':{},'nginx':{}}})
+        if 'run' in command:
+            options=command[command.index('run')+1:]
+            assert '-T' in options, 'Compose would require a TTY with piped stdin'
+            assert '--rm' in options and '--no-deps' in options
+            checks.append(options)
+            return b'<html>compiled frontend</html>'
+
+    monkeypatch.setattr(module.subprocess,'run',compose_call)
+    monkeypatch.setattr(module.subprocess,'check_output',compose_call)
+    module.prepare(argparse.Namespace(base=str(base),backup=str(backup),
+                                      project='archviz-test',prepare_only=False))
+    state=json.loads(module.STATE.read_text())
+    assert state['ready'] is True
+    assert state['activated'] is False
+    assert len(checks)==2
+    assert 'backend' in checks[0] and 'frontend' in checks[1]
+    assert (candidate/'backend/app/services/vector_engine.py').read_bytes()==engine.read_bytes()
