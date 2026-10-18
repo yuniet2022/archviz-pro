@@ -29,10 +29,9 @@ export default function App() {
       <div className="absolute inset-0">
         <Canvas shadows={false} gl={{ antialias: true, alpha: false }}>
           <color attach="background" args={['#1a1a2e']} />
-          <fog attach="fog" args={['#1a1a2e', 20, 60]} />
 
           <Suspense fallback={null}>
-            <CameraController />
+            <CameraController key={viewMode} />
             {viewMode === 'walkthrough' && <WalkthroughCamera />}
             <House3D />
           </Suspense>

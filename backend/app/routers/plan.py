@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.models.schemas import FloorPlanData, PlanReview, PlanUploadResponse
 from app.services.project_repository import ProjectRepository, RevisionConflict
-from app.services.semantic_import import import_drawing, pdf_engine_recipe
+from app.services.semantic_import import import_drawing, pdf_engine_recipe, dxf_engine_recipe
 from typing import Literal
 from app.services.plan_export import dxf_plan, svg_plan
 
@@ -59,6 +59,8 @@ def upload_plan(file: UploadFile = File(...), page: int = Form(1, ge=1),
                   'meters_per_pixel':meters_per_pixel, 'dxf_units':dxf_units}
     if suffix == '.pdf':
         parameters['pdf_engine'] = pdf_engine_recipe(pdf_mode)
+    if suffix == '.dxf':
+        parameters['dxf_engine'] = dxf_engine_recipe()
     recipe = json.dumps(parameters, sort_keys=True)
     try:
         if suffix in ('.json','.archviz'):
@@ -98,6 +100,7 @@ def upload_plan(file: UploadFile = File(...), page: int = Form(1, ge=1),
     return PlanUploadResponse(project_id=result['project_id'], status='success', revision=result['revision'],
         detected_walls=len(plan.walls), detected_rooms=len(plan.rooms), detected_doors=len(plan.doors),
         detected_windows=len(plan.windows), floor_plan=plan, learning=result['learning'],
+        detected_columns=len(plan.columns),
         message='Modelo recuperado de una revisión del mismo archivo.' if result['learning']['reused'] else
                 'Modelo inicial. Comprueba las medidas antes de aprobarlo.')
 

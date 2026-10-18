@@ -37,11 +37,15 @@ class Column(BaseModel):
     width: float = Field(default=.3, ge=.05, le=5, allow_inf_nan=False)
     depth: float = Field(default=.3, ge=.05, le=5, allow_inf_nan=False)
     height: float = Field(default=2.8, ge=.05, le=30, allow_inf_nan=False)
+    shape: Literal['rectangular', 'circular'] = 'rectangular'
+    rotation: float = Field(default=0, allow_inf_nan=False)
 
     @model_validator(mode='after')
     def on_floor(self):
         if abs(self.position.y) > 1e-6:
             raise ValueError('La columna debe apoyarse en Y=0')
+        if self.shape=='circular':
+            self.depth=self.width
         return self
 
 class Door(BaseModel):
@@ -53,6 +57,7 @@ class Door(BaseModel):
     height: float = 2.1
     frame_material: str = "wood"
     swing_direction: str = "left"
+    operation: Literal['hinged','double_hinged','sliding','overhead','bifold'] = 'hinged'
 
 class Window(BaseModel):
     model_config = ConfigDict(extra='allow')
@@ -100,6 +105,22 @@ class FurnitureItem(BaseModel):
     color: str = "#ffffff"
     dimensions: Vector3 = Vector3(x=1, y=1, z=1)
 
+class FloorRegion(BaseModel):
+    points: List[Vector3] = Field(min_length=3, max_length=10000)
+    holes: List[List[Vector3]] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode='after')
+    def valid_polygon(self):
+        from shapely.geometry import Polygon
+        if any(abs(p.y)>1e-6 for ring in [self.points,*self.holes] for p in ring):
+            raise ValueError('El suelo debe estar en Y=0')
+        if any(not 3<=len(ring)<=10000 for ring in self.holes):
+            raise ValueError('Contorno de patio inválido')
+        polygon=Polygon([(p.x,p.z) for p in self.points], [[(p.x,p.z) for p in ring] for ring in self.holes])
+        if not polygon.is_valid or polygon.area<.001:
+            raise ValueError('El contorno del suelo no es un polígono válido')
+        return self
+
 class FloorPlanData(BaseModel):
     model_config = ConfigDict(extra='allow', allow_inf_nan=False)
     walls: List[Wall] = []
@@ -108,6 +129,7 @@ class FloorPlanData(BaseModel):
     rooms: List[Room] = []
     dimensions: Dict[str, float] = {}
     columns: List[Column] = Field(default_factory=list, max_length=2000)
+    floor_regions: List[FloorRegion] = Field(default_factory=list, max_length=100)
     warnings: List[str] = Field(default_factory=list, max_length=100)
     architectural_info: ArchitecturalInfo = Field(default_factory=ArchitecturalInfo)
     furniture: List[FurnitureItem] = Field(default_factory=list, max_length=3000)
@@ -166,6 +188,7 @@ class PlanUploadResponse(BaseModel):
     detected_rooms: int
     detected_doors: int
     detected_windows: int
+    detected_columns: int = 0
     floor_plan: FloorPlanData
     message: str
     revision: int = 0

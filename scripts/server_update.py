@@ -158,7 +158,9 @@ def prepare(args):
     subprocess.run(release+['build','frontend'],check=True)
     subprocess.run(release+['run','--rm','--no-deps','backend','python','-c',
         'import fitz; from app.services.vector_engine import VectorEngine; '
-        'from app.main import app; assert callable(VectorEngine().process_pdf); '
+        'from app.services.architectural_pdf import ArchitecturalPDFEngine; '
+        'from app.services.cad_geometry import import_dxf; '
+        'from app.main import app; assert callable(ArchitecturalPDFEngine().process_pdf); '
         'print("Motor vectorial y API compatibles: OK")'],check=True)
     index=subprocess.check_output(release+['run','--rm','--no-deps','frontend','cat','/usr/share/nginx/html/index.html'])
     state['frontend_index_sha256']=hashlib.sha256(index).hexdigest()

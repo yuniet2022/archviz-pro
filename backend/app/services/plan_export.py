@@ -42,7 +42,12 @@ def primitives(plan: FloorPlanData, cut_height=1.2):
         if column.height < cut_height:
             continue
         x, y, w, d = column.position.x, -column.position.z, column.width/2, column.depth/2
-        polygons.append(('COLUMNS', [(x-w,y-d), (x+w,y-d), (x+w,y+d), (x-w,y+d)]))
+        if column.shape=='circular':
+            points=[(x+w*math.cos(i*math.tau/48),y+w*math.sin(i*math.tau/48)) for i in range(48)]
+        else:
+            c,s=math.cos(column.rotation),math.sin(column.rotation)
+            points=[(x+px*c-py*s,y+px*s+py*c) for px,py in [(-w,-d),(w,-d),(w,d),(-w,d)]]
+        polygons.append(('COLUMNS', points))
     return polygons, lines, labels, dimensions
 
 
@@ -56,8 +61,13 @@ def dxf_plan(plan: FloorPlanData, cut_height=1.2):
     polygons, lines, _, dimensions = primitives(plan, cut_height)
     if not polygons:
         raise ValueError('No hay geometría a la altura de corte elegida')
+    columns=iter(c for c in plan.columns if c.height>=cut_height)
     for layer, points in polygons:
-        space.add_lwpolyline(points, close=True, dxfattribs={'layer':layer})
+        column=next(columns) if layer=='COLUMNS' else None
+        if column is not None and column.shape=='circular':
+            space.add_circle((column.position.x,-column.position.z),column.width/2,dxfattribs={'layer':layer})
+        else:
+            space.add_lwpolyline(points, close=True, dxfattribs={'layer':layer})
     for layer, a, b in lines:
         space.add_line(a, b, dxfattribs={'layer':layer})
     for a, b, length in dimensions:

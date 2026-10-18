@@ -49,14 +49,38 @@ function WallMesh({ id, start, end, height = 2.8, thickness = 0.15 }: {
       <boxGeometry args={[thickness,piece.high-piece.low,piece.to-piece.from]}/>
       <meshStandardMaterial color={selected?'#18b9d8':'#f5f5f0'} roughness={.9}/>
     </mesh>)}
-    {openings.map(o=><mesh key={o.id} position={[0,(o.sill_height??0)+o.height/2,(o.position-.5)*length]}>
-      <boxGeometry args={[thickness*.35,o.height,o.width]}/>
-      <meshStandardMaterial color={o.sill_height!==undefined?'#8bc2dd':'#a77d4a'} transparent={o.sill_height!==undefined} opacity={o.sill_height !== undefined ? .45 : 1}/>
-    </mesh>)}
+    {openings.map(o=>o.sill_height!==undefined ? <group key={o.id} position={[0,o.sill_height,(o.position-.5)*length]}>
+      <mesh position={[0,o.height/2,0]}>
+        <boxGeometry args={[.015,o.height,o.width]}/>
+        <meshStandardMaterial color="#8bc2dd" transparent opacity={.3} depthWrite={false}/>
+      </mesh>
+      {[0,o.height].map(y=><mesh key={y} position={[0,y,0]}>
+        <boxGeometry args={[thickness,.045,o.width]}/><meshStandardMaterial color="#e5e7eb"/>
+      </mesh>)}
+      {[-o.width/2,o.width/2].map(z=><mesh key={z} position={[0,o.height/2,z]}>
+        <boxGeometry args={[thickness,o.height,.045]}/><meshStandardMaterial color="#e5e7eb"/>
+      </mesh>)}
+    </group> : o.operation==='overhead' ? <mesh key={o.id} position={[0,o.height+.08,(o.position-.5)*length]}>
+      <boxGeometry args={[.2,.12,o.width]}/><meshStandardMaterial color="#e5e7eb"/>
+    </mesh> : o.operation==='sliding' ? <group key={o.id} position={[0,0,(o.position-.5)*length]}>
+      {[0,1].map(i=><mesh key={i} position={[i*.035,o.height/2,o.width/4]}>
+        <boxGeometry args={[.02,o.height,o.width/2]}/><meshStandardMaterial color="#8bc2dd" transparent opacity={.35} depthWrite={false}/>
+      </mesh>)}
+    </group> : o.operation==='double_hinged' || o.operation==='bifold' ? <group key={o.id} position={[0,0,(o.position-.5)*length]}>
+      {[-1,1].map(side=><group key={side} position={[0,0,side*o.width/2]} rotation={[0,side*Math.PI*.44,0]}>
+        <mesh position={[0,o.height/2,-side*o.width/4]}>
+          <boxGeometry args={[.035,o.height,o.width/2]}/><meshStandardMaterial color="#b89470"/>
+        </mesh>
+      </group>)}
+    </group> : <group key={o.id} position={[0,0,(o.position-.5)*length-o.width/2]} rotation={[0,Math.PI*.44,0]}>
+      <mesh position={[0,o.height/2,o.width/2]}>
+        <boxGeometry args={[.035,o.height,o.width]}/><meshStandardMaterial color="#b89470"/>
+      </mesh>
+    </group>)}
   </group>
 }
 
-function FloorMesh({ points }: { points: [number, number, number][] }) {
+function FloorMesh({ points, holes = [] }: { points: [number, number, number][]; holes?: [number, number, number][][] }) {
   const shape = useMemo(() => {
     const s = new THREE.Shape()
     if (points.length > 0) {
@@ -65,12 +89,18 @@ function FloorMesh({ points }: { points: [number, number, number][] }) {
         s.lineTo(points[i][0], -points[i][2])
       }
       s.closePath()
+      for (const ring of holes) {
+        const hole = new THREE.Path()
+        ring.forEach((p,i)=>i===0?hole.moveTo(p[0],-p[2]):hole.lineTo(p[0],-p[2]))
+        hole.closePath()
+        s.holes.push(hole)
+      }
     }
     return s
-  }, [points])
+  }, [points, holes])
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
       <shapeGeometry args={[shape]} />
       <meshStandardMaterial color="#d4a574" roughness={0.6} side={THREE.DoubleSide} />
     </mesh>
@@ -168,19 +198,12 @@ function FurnitureMesh({ item }: { item: any }) {
 export default function House3D() {
   const { walls, furniture, floorPlan, selectedElementId } = useProjectStore()
 
-  const floorPoints = useMemo(() => {
-    if (walls.length === 0) return [] as [number, number, number][]
-    const xs = walls.flatMap(w => [w.start[0], w.end[0]])
-    const zs = walls.flatMap(w => [w.start[2], w.end[2]])
-    const minX = Math.min(...xs), maxX = Math.max(...xs)
-    const minZ = Math.min(...zs), maxZ = Math.max(...zs)
-    return [
-      [minX, 0, minZ],
-      [maxX, 0, minZ],
-      [maxX, 0, maxZ],
-      [minX, 0, maxZ],
-    ] as [number, number, number][]
-  }, [walls])
+  const floorRegions = useMemo(() => {
+    const regions = floorPlan?.floor_regions?.length ? floorPlan.floor_regions :
+      (floorPlan?.rooms ?? []).filter(room=>room.points.length>=3).map(room=>({points:room.points,holes:[]}))
+    const tuple = (p: {x:number;y:number;z:number}): [number,number,number] => [p.x,0,p.z]
+    return regions.map(region=>({points:region.points.map(tuple),holes:region.holes.map(ring=>ring.map(tuple))}))
+  }, [floorPlan])
 
   return (
     <group>
@@ -191,12 +214,12 @@ export default function House3D() {
       />
       <pointLight position={[-10, 10, -10]} intensity={0.5} color="#ffd4a3" />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
         <planeGeometry args={[100, 100]} />
         <meshStandardMaterial color="#e0e0e0" />
       </mesh>
 
-      {floorPoints.length > 0 && <FloorMesh points={floorPoints} />}
+      {floorRegions.map((region,i)=><FloorMesh key={i} points={region.points} holes={region.holes}/>)}
 
       {walls.map((wall) => (
         <WallMesh 
@@ -209,16 +232,17 @@ export default function House3D() {
         />
       ))}
 
-      {floorPlan?.columns.map(column=><mesh key={column.id} position={[column.position.x,column.height/2,column.position.z]}
+      {floorPlan?.columns.map(column=><mesh key={column.id} position={[column.position.x,column.height/2,column.position.z]} rotation={[0,column.rotation??0,0]}
         onClick={e=>{e.stopPropagation();useProjectStore.setState({selectedElementId:column.id})}}>
-        <boxGeometry args={[column.width,column.height,column.depth]}/><meshStandardMaterial color={selectedElementId===column.id?'#18b9d8':'#c79a51'}/>
+        {column.shape==='circular' ? <cylinderGeometry args={[column.width/2,column.width/2,column.height,32]}/> : <boxGeometry args={[column.width,column.height,column.depth]}/>}
+        <meshStandardMaterial color={selectedElementId===column.id?'#18b9d8':'#f5f5f0'} roughness={.9}/>
       </mesh>)}
 
       {furniture.map((item) => (
         <FurnitureMesh key={item.id} item={item} />
       ))}
 
-      <gridHelper args={[50, 50, '#cccccc', '#eeeeee']} position={[0, 0.001, 0]} />
+      <gridHelper args={[50, 50, '#cccccc', '#eeeeee']} position={[0, -0.03, 0]} />
     </group>
   )
 }

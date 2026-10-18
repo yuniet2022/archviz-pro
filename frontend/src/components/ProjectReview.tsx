@@ -37,6 +37,9 @@ export default function ProjectReview() {
   if (!projectId || !floorPlan) return null
   const wall = walls.find(w=>w.id===selected)
   const column = floorPlan.columns.find(c=>c.id===selected)
+  const door = floorPlan.doors.find(o=>o.id===selected)
+  const windowOpening = floorPlan.windows.find(o=>o.id===selected)
+  const opening = door ?? windowOpening
   const changed = (plan:FloorPlan) => {
     useProjectStore.setState({floorPlan:plan,dirty:true,measurementsConfirmed:false})
     setApproved(false)
@@ -49,6 +52,12 @@ export default function ProjectReview() {
   const updateColumn = (patch:Partial<ModelColumn>) => {
     if (!column) return
     changed({...floorPlan,columns:floorPlan.columns.map(c=>c.id===column.id?{...c,...patch}:c)})
+  }
+  const updateOpening = (patch:Partial<NonNullable<typeof opening>>) => {
+    if(!opening)return
+    changed({...floorPlan,
+      doors:floorPlan.doors.map(o=>o.id===selected?{...o,...patch}:o),
+      windows:floorPlan.windows.map(o=>o.id===selected?{...o,...patch}:o)})
   }
   const updateInfo = (patch:Partial<ArchitecturalInfo>)=>changed({...floorPlan,architectural_info:{...floorPlan.architectural_info,...patch}})
   const save = async () => {
@@ -88,6 +97,7 @@ export default function ProjectReview() {
     const p = (v:{x:number;y:number;z:number})=>({x:v.x*factor,y:v.y*factor,z:v.z*factor})
     const scaled = {...current,walls:current.walls.map(w=>({...w,start:p(w.start),end:p(w.end),height:w.height*factor,thickness:w.thickness*factor})),
       columns:current.columns.map(c=>({...c,position:p(c.position),width:c.width*factor,depth:c.depth*factor,height:c.height*factor})),
+      floor_regions:(current.floor_regions??[]).map(r=>({...r,points:r.points.map(p),holes:r.holes.map(ring=>ring.map(p))})),
       doors:current.doors.map(d=>({...d,width:d.width*factor,height:d.height*factor})),
       windows:current.windows.map(w=>({...w,width:w.width*factor,height:w.height*factor,sill_height:(w.sill_height??0)*factor})),rooms:[]}
     useProjectStore.setState({walls:scaled.walls.map(w=>({...w,start:[w.start.x,0,w.start.z],end:[w.end.x,0,w.end.z]})),furniture:[]})
@@ -111,6 +121,8 @@ export default function ProjectReview() {
           <option value="">Seleccionar elemento</option>
           {walls.map((w,i)=><option key={w.id} value={w.id}>Muro {i+1}</option>)}
           {floorPlan.columns.map((c,i)=><option key={c.id} value={c.id}>Columna {i+1}</option>)}
+          {floorPlan.doors.map((o,i)=><option key={o.id} value={o.id}>Puerta {i+1}</option>)}
+          {floorPlan.windows.map((o,i)=><option key={o.id} value={o.id}>Ventana {i+1}</option>)}
         </select>
         <div className="flex gap-2 text-xs">
           <button className="border p-2 rounded" onClick={()=>{const id=crypto.randomUUID();setWalls([...walls,{id,start:[0,0,0],end:[1,0,0],height:2.8,thickness:.15}]);setSelected(id);changed({...floorPlan,rooms:[]})}}>Añadir muro</button>
@@ -127,7 +139,18 @@ export default function ProjectReview() {
           <NumberField label="Ancho columna (m)" value={column.width} onChange={v=>updateColumn({width:v})}/>
           <NumberField label="Fondo columna (m)" value={column.depth} onChange={v=>updateColumn({depth:v})}/>
           <NumberField label="Altura columna (m)" value={column.height} onChange={v=>updateColumn({height:v})}/>
+          <NumberField label="Giro columna (grados)" value={(column.rotation??0)*180/Math.PI} onChange={v=>updateColumn({rotation:v*Math.PI/180})}/>
+          <label className="text-xs text-gray-600">Sección de columna<select aria-label="Sección de columna" value={column.shape??'rectangular'} onChange={e=>updateColumn({shape:e.target.value as ModelColumn['shape']})} className="block border rounded p-1.5 w-full"><option value="rectangular">Rectangular</option><option value="circular">Circular</option></select></label>
         </div>}
+        {opening && <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs col-span-2">Muro de la abertura<select aria-label="Muro de la abertura" value={opening.wall_id} onChange={e=>updateOpening({wall_id:e.target.value})} className="block border rounded p-1.5 w-full">{walls.map((w,i)=><option key={w.id} value={w.id}>Muro {i+1}</option>)}</select></label>
+          <NumberField label="Posición en el muro (0–1)" value={opening.position} onChange={v=>updateOpening({position:v})}/>
+          <NumberField label="Ancho abertura (m)" value={opening.width} onChange={v=>updateOpening({width:v})}/>
+          <NumberField label="Alto abertura (m)" value={opening.height} onChange={v=>updateOpening({height:v})}/>
+          {windowOpening && <NumberField label="Antepecho ventana (m)" value={opening.sill_height??0} onChange={v=>updateOpening({sill_height:v})}/>}
+          {door && <label className="text-xs">Tipo de puerta<select aria-label="Tipo de puerta" value={door.operation??'hinged'} onChange={e=>updateOpening({operation:e.target.value as typeof door.operation})} className="block border rounded p-1.5 w-full">{[['hinged','Abatible'],['double_hinged','Doble'],['sliding','Corredera'],['overhead','Garaje'],['bifold','Plegable']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>}
+        </div>}
+        {opening && <button className="text-xs text-red-700" onClick={()=>{changed({...floorPlan,doors:floorPlan.doors.filter(o=>o.id!==selected),windows:floorPlan.windows.filter(o=>o.id!==selected)});setSelected('')}}>Eliminar abertura seleccionada</button>}
         {(wall||column) && <button className="text-xs text-red-700" onClick={()=>{if(wall)setWalls(walls.filter(w=>w.id!==wall.id));changed({...floorPlan,rooms:[],columns:floorPlan.columns.filter(c=>c.id!==selected)});setSelected('')}}>Eliminar elemento seleccionado</button>}
         <div className="flex items-end gap-2"><NumberField label="Factor de escala global" value={factor} onChange={setFactor}/><button className="border rounded p-2 text-xs" onClick={scale}>Aplicar escala</button></div>
       </section>

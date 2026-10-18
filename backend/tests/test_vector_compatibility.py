@@ -4,6 +4,7 @@ import pytest
 
 from app.services.semantic_import import import_drawing, pdf_engine_recipe
 from app.services.vector_engine import VectorEngine
+from app.services.architectural_pdf import ArchitecturalPDFEngine
 
 
 def cad_pdf():
@@ -26,15 +27,19 @@ def geometry(plan):
     }
 
 
-def test_pdf_adapter_preserves_deployed_vector_geometry_scale_and_heights(tmp_path):
+def test_pdf_adapter_uses_isotropic_scale_and_replaces_fixed_exterior_heights(tmp_path):
     path=tmp_path/'plan.pdf';path.write_bytes(cad_pdf())
     existing=VectorEngine().process_pdf(str(path))
     updated=import_drawing(str(path),'.pdf',1,.001,'auto','vector')
     assert len(existing.walls)>0
     assert len(existing.rooms)>0
-    assert geometry(updated)==geometry(existing)
+    assert len(updated.walls)==4
+    assert len(updated.rooms)==1
     assert updated.warnings
-    assert updated.dimensions['px_per_ft_x'] != updated.dimensions['px_per_ft_y']
+    assert updated.dimensions['px_per_ft_x'] == updated.dimensions['px_per_ft_y']
+    assert existing.dimensions['px_per_ft_x'] != existing.dimensions['px_per_ft_y']
+    assert all(w.height==2.8 for w in updated.walls)
+    assert any(w.height>4 for w in existing.walls)
 
 
 def test_pdf_page_selection_keeps_the_same_vectors_and_labels(tmp_path):
@@ -44,7 +49,7 @@ def test_pdf_page_selection_keeps_the_same_vectors_and_labels(tmp_path):
         doc.new_page(width=900,height=700)
         doc.insert_pdf(selected)
         doc.save(multi)
-    assert geometry(import_drawing(str(multi),'.pdf',2,.05,'auto','vector')) == geometry(VectorEngine().process_pdf(str(original)))
+    assert geometry(import_drawing(str(multi),'.pdf',2,.05,'auto','vector')) == geometry(ArchitecturalPDFEngine().process_pdf(str(original)))
     with pytest.raises(ValueError,match='página'):
         import_drawing(str(multi),'.pdf',3,.05,'auto','vector')
 
