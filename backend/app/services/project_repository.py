@@ -41,6 +41,10 @@ class ProjectRepository:
                     id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
                     name TEXT NOT NULL, sha256 TEXT NOT NULL, role TEXT NOT NULL, content BLOB NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS source_details (
+                    source_id TEXT PRIMARY KEY REFERENCES sources(id),
+                    metadata TEXT NOT NULL
+                );
             ''')
 
     @contextmanager
@@ -148,23 +152,50 @@ class ProjectRepository:
                  'predicted': json.loads(r['original']), 'corrected': json.loads(r['after_json']),
                  'reviewed_at': r['created_at'], 'units': 'm'} for r in rows]
 
-    def add_source(self, project_id, name, digest, role, content):
+    def add_source(self, project_id, name, digest, role, content, metadata=None):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             if db.execute('SELECT id FROM projects WHERE id=?', (project_id,)).fetchone() is None:
                 raise KeyError(project_id)
-            size = db.execute('SELECT COALESCE(SUM(length(content)),0) FROM sources WHERE project_id=?', (project_id,)).fetchone()[0]
-            if size+len(content) > 100*1024*1024:
-                raise ValueError('Máximo de 100 MB de fuentes por proyecto')
-            db.execute('INSERT INTO sources VALUES (?, ?, ?, ?, ?, ?)',
-                (str(uuid.uuid4()), project_id, name, digest, role, content))
+            duplicate=db.execute('SELECT id FROM sources WHERE project_id=? AND sha256=?',(project_id,digest)).fetchone()
+            if duplicate:
+                pass  # Classification changes use describe_source; re-uploading is idempotent.
+            else:
+                size = db.execute('SELECT COALESCE(SUM(length(content)),0) FROM sources WHERE project_id=?', (project_id,)).fetchone()[0]
+                if size+len(content) > 100*1024*1024:
+                    raise ValueError('Máximo de 100 MB de fuentes por proyecto')
+                source_id=str(uuid.uuid4())
+                db.execute('INSERT INTO sources VALUES (?, ?, ?, ?, ?, ?)',
+                    (source_id, project_id, name, digest, role, content))
+                if metadata is not None:
+                    db.execute('INSERT INTO source_details VALUES (?,?)',(source_id,json.dumps(metadata)))
         return self.sources(project_id)
 
     def sources(self, project_id, include_content=False):
-        self.get(project_id)
+        project=self.get(project_id)
         fields = '*' if include_content else 'id, name, sha256, role, length(content) AS size_bytes'
         with self.connection() as db:
-            return [dict(row) for row in db.execute(f'SELECT {fields} FROM sources WHERE project_id=? ORDER BY rowid', (project_id,))]
+            rows=[dict(row) for row in db.execute(f'SELECT {fields} FROM sources WHERE project_id=? ORDER BY rowid', (project_id,))]
+            details={r['source_id']:json.loads(r['metadata']) for r in db.execute(
+                'SELECT d.* FROM source_details d JOIN sources s ON s.id=d.source_id WHERE s.project_id=?',(project_id,))}
+        return [{**row,'metadata':details.get(row['id'],
+            {'document_type':'floor_plan','page':project['source']['import_recipe'].get('page',1)}
+            if row['role']=='original' else {})} for row in rows]
+
+    def source(self, project_id, source_id):
+        with self.connection() as db:
+            row=db.execute('SELECT * FROM sources WHERE project_id=? AND id=?',(project_id,source_id)).fetchone()
+            if row is None:raise KeyError(source_id)
+            detail=db.execute('SELECT metadata FROM source_details WHERE source_id=?',(source_id,)).fetchone()
+        return {**dict(row),'metadata':json.loads(detail['metadata']) if detail else {}}
+
+    def describe_source(self, project_id, source_id, metadata):
+        with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT id FROM sources WHERE project_id=? AND id=?',(project_id,source_id)).fetchone() is None:
+                raise KeyError(source_id)
+            db.execute('INSERT OR REPLACE INTO source_details VALUES (?,?)',(source_id,json.dumps(metadata)))
+        return self.sources(project_id)
 
     def history(self, project_id):
         self.get(project_id)
@@ -188,6 +219,9 @@ class ProjectRepository:
             reviews = db.execute('SELECT * FROM reviews WHERE project_id=? ORDER BY revision', (project_id,)).fetchall()
             fields = '*' if include_content else 'id, name, sha256, role, length(content) AS size_bytes'
             sources = [dict(source) for source in db.execute(f'SELECT {fields} FROM sources WHERE project_id=? ORDER BY rowid', (project_id,))]
+            details={r['source_id']:json.loads(r['metadata']) for r in db.execute(
+                'SELECT d.* FROM source_details d JOIN sources s ON s.id=d.source_id WHERE s.project_id=?',(project_id,))}
+            sources=[{**s,'metadata':details.get(s['id'],{})} for s in sources]
             eligible = any(r['approved'] and r['measurements_confirmed'] and r['allow_learning'] for r in reviews)
         history = [{**{k:r[k] for k in ('id','revision','approved','allow_learning','measurements_confirmed','notes','created_at')},
                     'before':json.loads(r['before_json']), 'after':json.loads(r['after_json'])} for r in reviews]

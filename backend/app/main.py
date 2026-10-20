@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.core.config import settings
-from app.routers import plan, furnish, video
+from app.routers import plan, furnish, video, roof
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -26,6 +26,7 @@ app.mount("/exports", StaticFiles(directory=settings.EXPORT_DIR), name="exports"
 app.include_router(plan.router, prefix=settings.API_V1_PREFIX)
 app.include_router(furnish.router, prefix=settings.API_V1_PREFIX)
 app.include_router(video.router, prefix=settings.API_V1_PREFIX)
+app.include_router(roof.router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/")
 async def root():

@@ -181,3 +181,23 @@ python3 scripts/server_update.py rollback
 El rollback conserva el directorio de datos nuevo; no borra información ni restaura destructivamente la base de datos. Mantén las carpetas original y nueva, el respaldo y las imágenes antiguas: la versión activa utiliza archivos de la carpeta nueva. Una preparación posterior debe usar otra carpeta, no sobrescribir la versión activa.
 
 La prueba de migración reprodujo una instalación con fuentes montadas y frontend estático: preparación sin sustituir la web activa, conservación de configuración de base de datos y trabajador, activación, importación PDF vectorial y rollback. También se verificó el retorno automático a la versión original cuando falla la comprobación posterior a activar. Las pruebas de backend incluyen escala isotrópica, selección de página, rechazo de mobiliario sin trama, contorno con retranqueos, columnas en bloques DXF y de sección girada/circular, huecos por capa, intercambio de contornos con patios y separación de memoria entre detectores. La vivienda real debe comprobarse de nuevo en el servidor con su A-2 después de activar.
+
+## Techo y expediente de planos · primera etapa
+
+En una casa ya importada, **Techo y planos → Documentos** permite seleccionar varios archivos y añadirlos a ese mismo proyecto. No uses **Nueva casa / importar** para las láminas complementarias. Indica la función de cada documento (planta, fachadas/secciones, cubierta, estructura, electricidad, plomería o referencia) y su página. Se conservan los originales con huella SHA-256; una carga repetida del mismo contenido no duplica el archivo ni cambia su clasificación. Las fuentes siguen limitadas a 20 MB por archivo y 100 MB por proyecto.
+
+Para PDF vectorial, **Ver página y leer datos de techo** muestra la página y busca notas explícitas de pendiente `6/12 ROOF PITCH`, aleros en pulgadas y acabado shingle/metal/teja. Cada evidencia conserva texto, documento, hash y página. Los parámetros contradictorios se omiten. Las cotas de fachadas con numeradores separados gráficamente, los escaneados y las capas DXF de cubierta todavía requieren interpretación manual. Un detalle genérico de frontón no determina el tipo de techo de la casa.
+
+**Usar estos datos en la propuesta** carga los valores reconocidos. En **Techo** puedes elegir plano, una agua, dos aguas o cuatro aguas, ajustar pendiente por cada 12, altura de apoyo, alero, orientación, acabado y color. Las superficies se recortan al contorno real del suelo, conservando los patios interiores abiertos. Cuatro aguas es una aproximación geométrica; no es una solución constructiva de limatesas en entrantes. La altura debe superar los muros y columnas para evitar atravesarlos. Sin un contorno válido, no se genera una caja rectangular sustituta.
+
+Esta primera etapa genera una cubierta continua como **propuesta visual**. No reconstruye automáticamente las cumbreras, limahoyas, volúmenes a distintas alturas, estructura de cerchas ni encuentros exactos de los PDF. Usar los parámetros de un documento no equivale a recuperar su geometría. La etapa siguiente debe alinear planta de cubierta y alzados, separar volúmenes y revisar cada encuentro. No se cambia la geometría de la casa ni la distribución interior al añadir un techo.
+
+**Mostrar / ocultar techo** permite alternar exterior e interiores sin retirarlo del modelo. Las sombras proyectadas siguen desactivadas. **Guardar proyecto** conserva malla, parámetros, procedencia y condición de propuesta en JSON/`.archviz` y ZIP; el ZIP incluye además los documentos y su clasificación/página. El botón guarda un borrador, sin aprobar la cubierta ni autorizar aprendizaje. Modificar muros/columnas o reescalar retira la cubierta anterior para regenerarla; la API también rechaza un techo con huella de geometría desactualizada.
+
+Endpoints de esta etapa:
+
+- `POST /api/v1/plans/{id}/sources`: admite `document_type` y `page` además del archivo.
+- `PATCH /api/v1/plans/{id}/sources/{source_id}`: función y página.
+- `GET /api/v1/plans/{id}/sources/{source_id}/inspect?page=1`: datos explícitos y evidencias PDF.
+- `GET /api/v1/plans/{id}/sources/{source_id}/preview?page=1`: imagen de la página seleccionada.
+- `POST /api/v1/roofs/preview`: genera una propuesta sobre el modelo actual; opcionalmente vincula un documento del mismo proyecto. No guarda revisiones por sí mismo.

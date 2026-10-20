@@ -10,6 +10,7 @@ import TourRecorder from './scenes/TourRecorder'
 import { useProjectStore } from './stores/projectStore'
 import { Box, Layers, MousePointer } from 'lucide-react'
 import ProjectReview from './components/ProjectReview'
+import RoofAndPlans from './components/RoofAndPlans'
 import axios from 'axios'
 import { loadProject } from './utils/model'
 
@@ -64,9 +65,10 @@ export default function App() {
             </div>
           </div>
         )}
-        {projectId && <button disabled={recording} className="text-white text-xs border border-white/30 rounded px-3 py-2" onClick={()=>{if(useProjectStore.getState().dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y abrir otro archivo?'))return;useProjectStore.getState().clearProject();try{localStorage.removeItem('archviz-project')}catch{/* optional */}}}>Importar otro archivo</button>}
+        {projectId && <button disabled={recording} className="text-white text-xs border border-white/30 rounded px-3 py-2" onClick={()=>{if(useProjectStore.getState().dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y abrir otro archivo?'))return;useProjectStore.getState().clearProject();try{localStorage.removeItem('archviz-project')}catch{/* optional */}}}>Nueva casa / importar</button>}
       </header>
       <ProjectReview />
+      <RoofAndPlans />
 
       <div className="absolute inset-0 z-10 pointer-events-none">
         <div className="h-full flex flex-col justify-between p-6">

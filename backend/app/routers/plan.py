@@ -95,7 +95,8 @@ def upload_plan(file: UploadFile = File(...), page: int = Form(1, ge=1),
         raise HTTPException(422, f'No se pudo interpretar el archivo: {str(error)[:400]}')
     repo = repository()
     result = repo.create(hashlib.sha256(data).hexdigest(), recipe, suffix[1:], floor_plan, reuse_reviewed)
-    repo.add_source(result['project_id'], name, hashlib.sha256(data).hexdigest(), 'original', data)
+    repo.add_source(result['project_id'], name, hashlib.sha256(data).hexdigest(), 'original', data,
+                    {'document_type':'floor_plan','page':page})
     plan = FloorPlanData.model_validate(result['floor_plan'])
     return PlanUploadResponse(project_id=result['project_id'], status='success', revision=result['revision'],
         detected_walls=len(plan.walls), detected_rooms=len(plan.rooms), detected_doors=len(plan.doors),
@@ -147,13 +148,16 @@ def sources(project_id: UUID):
 
 
 @router.post('/{project_id}/sources')
-def attach_source(project_id: UUID, file: UploadFile = File(...)):
+def attach_source(project_id: UUID, file: UploadFile = File(...),
+                  document_type: Literal['floor_plan','elevation','roof','structure','electrical','plumbing','reference'] = Form('reference'),
+                  page: int = Form(1,ge=1,le=1000)):
     load_project(project_id)
     name, data = uploaded(file)
     if Path(name).suffix.lower() not in ('.pdf','.dxf','.png','.jpg','.jpeg','.json','.glb','.gltf','.obj','.ifc','.archviz'):
         raise HTTPException(415, 'Formato de referencia no compatible')
     try:
-        result = repository().add_source(str(project_id), name, hashlib.sha256(data).hexdigest(), 'reference', data)
+        result = repository().add_source(str(project_id), name, hashlib.sha256(data).hexdigest(), 'reference', data,
+                                        {'document_type':document_type,'page':page})
         return {'sources':result}
     except ValueError as error:
         raise HTTPException(413, str(error))
@@ -206,7 +210,7 @@ def archive_project(project_id: UUID):
             # Use generated IDs; filenames from uploads never become ZIP paths.
             path = 'sources/'+source['id']+Path(source['name']).suffix.lower()
             archive.writestr(path, source['content'])
-            source_metadata.append({k:source[k] for k in ('id','name','sha256','role')}
+            source_metadata.append({k:source[k] for k in ('id','name','sha256','role','metadata')}
                                    | {'path':path, 'size_bytes':len(source['content'])})
         manifest = {'schema_version':1, 'units':'m', 'up_axis':'Y',
                     'project':result, 'sources':source_metadata,

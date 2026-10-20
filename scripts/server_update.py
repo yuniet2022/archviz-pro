@@ -161,6 +161,7 @@ def prepare(args):
         'import fitz; from app.services.vector_engine import VectorEngine; '
         'from app.services.architectural_pdf import ArchitecturalPDFEngine; '
         'from app.services.cad_geometry import import_dxf; '
+        'from app.services.roof_engine import roof_proposal; assert callable(roof_proposal); '
         'from app.main import app; assert callable(ArchitecturalPDFEngine().process_pdf); '
         'print("Motor vectorial y API compatibles: OK")'],check=True,stdin=subprocess.DEVNULL)
     index=subprocess.check_output(release+['run','--rm','-T','--no-deps','frontend','cat','/usr/share/nginx/html/index.html'],stdin=subprocess.DEVNULL)

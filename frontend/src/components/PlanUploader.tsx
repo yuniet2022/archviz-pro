@@ -105,7 +105,7 @@ export default function PlanUploader() {
             <label className="block">Página PDF <input aria-label="Página PDF" type="number" min="1" value={page} onChange={e=>setPage(Math.max(1,Number(e.target.value)))} className="border rounded w-20 ml-2 p-1"/></label>
             <label className="block">Metros por píxel (imágenes y PDF escaneados) <input aria-label="Metros por píxel" type="number" min=".00001" max="10" step=".001" value={metersPerPixel} onChange={e=>setMetersPerPixel(Number(e.target.value))} className="border rounded w-24 ml-2 p-1"/></label>
             <label className="block">Unidades DXF <select aria-label="Unidades DXF" value={units} onChange={e=>setUnits(e.target.value)} className="border rounded ml-2 p-1">{['auto','m','cm','mm','ft','in'].map(u=><option key={u}>{u}</option>)}</select></label>
-            <p>En planos CAD, la escala se calcula con las cotas y se aísla una planta. En escaneados, usa la escala manual. Comprueba medidas y alturas antes de aprobar.</p>
+            <p>Después de importar la planta, usa «Techo y planos» para añadir los demás documentos a la misma casa. En planos CAD, la escala se calcula con las cotas y se aísla una planta. En escaneados, usa la escala manual. Comprueba medidas y alturas antes de aprobar.</p>
           </div>
           {message && <p role="alert" className="text-sm text-red-700">{message}</p>}
         </div>

@@ -153,6 +153,41 @@ class FixedFixture(FurnitureItem):
             raise ValueError('El lavamanos debe quedar dentro de la meseta')
         return self
 
+class RoofSettings(BaseModel):
+    kind: Literal['flat','shed','gable','hip'] = 'gable'
+    pitch: float = Field(default=6, ge=0, le=24, allow_inf_nan=False)
+    eave_height: float = Field(default=3.1, ge=1.9, le=30, allow_inf_nan=False)
+    overhang: float = Field(default=.4, ge=0, le=1.5, allow_inf_nan=False)
+    axis: Literal['x','z'] = 'z'
+    material: Literal['shingle','metal','tile','membrane'] = 'shingle'
+    color: str = Field(default='#626267', pattern=r'^#[0-9a-fA-F]{6}$')
+
+
+class RoofMesh(BaseModel):
+    vertices: List[Vector3] = Field(max_length=40000)
+    triangles: List[List[int]] = Field(max_length=40000)
+
+    @model_validator(mode='after')
+    def valid_mesh(self):
+        for triangle in self.triangles:
+            if len(triangle)!=3 or len(set(triangle))!=3 or any(i<0 or i>=len(self.vertices) for i in triangle):
+                raise ValueError('Triángulo del techo inválido')
+        if self.triangles and not self.vertices:
+            raise ValueError('Faltan vértices del techo')
+        return self
+
+
+class RoofDefinition(BaseModel):
+    settings: RoofSettings
+    surface: RoofMesh
+    gables: RoofMesh
+    footprint_hash: str
+    status: Literal['proposal','reviewed'] = 'proposal'
+    origin: Literal['design','document_parameters','imported_geometry'] = 'design'
+    source: Dict[str, Any] = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list, max_length=30)
+
+
 class FloorPlanData(BaseModel):
     model_config = ConfigDict(extra='allow', allow_inf_nan=False)
     walls: List[Wall] = []
@@ -166,10 +201,15 @@ class FloorPlanData(BaseModel):
     architectural_info: ArchitecturalInfo = Field(default_factory=ArchitecturalInfo)
     furniture: List[FurnitureItem] = Field(default_factory=list, max_length=3000)
     fixtures: List[FixedFixture] = Field(default_factory=list, max_length=1000)
+    roof: Optional[RoofDefinition] = None
 
     @model_validator(mode='after')
     def valid_geometry(self):
         json.dumps(self.model_dump(), allow_nan=False)
+        if self.roof:
+            from app.services.roof_engine import footprint_hash
+            if self.roof.footprint_hash!=footprint_hash(self):
+                raise ValueError('La geometría cambió: retira y vuelve a generar el techo antes de guardar')
         if max(len(self.walls), len(self.doors), len(self.windows), len(self.rooms)) > 3000:
             raise ValueError('Demasiados elementos en el modelo')
         items = [*self.walls, *self.columns, *self.doors, *self.windows, *self.rooms]

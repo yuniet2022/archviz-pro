@@ -48,7 +48,8 @@ export interface ProjectState {
   placementMode: boolean
   tourPointMode: boolean
   interiorMessage: string
-  activePanel: 'furniture' | 'tour' | null
+  activePanel: 'furniture' | 'tour' | 'roof' | null
+  roofVisible: boolean
   tour: TourPlan | null
   tourProgress: number
   tourDuration: number
@@ -91,6 +92,7 @@ export const useProjectStore = create<ProjectState>((set,get) => ({
   tourPointMode: false,
   interiorMessage: '',
   activePanel: null,
+  roofVisible: true,
   tour: null,
   tourProgress: 0,
   tourDuration: 60,
@@ -133,6 +135,6 @@ export const useProjectStore = create<ProjectState>((set,get) => ({
     selectedStyle: null,
     selectedFurnitureId:'',selectedFixtureId:'',selectedElementId:'', placementMode:false, tourPointMode:false,interiorMessage:'',activePanel:null,
     tour:null, isPlaying:false, tourProgress:0, recording:false, recordingError:'',videoResult:null,
-    walkInput:{forward:0,turn:0}
+    walkInput:{forward:0,turn:0},roofVisible:true
   })}
 }))

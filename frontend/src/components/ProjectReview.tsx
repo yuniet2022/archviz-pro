@@ -49,11 +49,11 @@ export default function ProjectReview() {
   const updateWall = (patch:Partial<Wall>) => {
     if (!wall) return
     setWalls(walls.map(w=>w.id===wall.id?{...w,...patch}:w)); setApproved(false)
-    changed({...floorPlan,rooms:[]})
+    changed({...floorPlan,rooms:[],roof:null})
   }
   const updateColumn = (patch:Partial<ModelColumn>) => {
     if (!column) return
-    changed({...floorPlan,columns:floorPlan.columns.map(c=>c.id===column.id?{...c,...patch}:c)})
+    changed({...floorPlan,roof:null,columns:floorPlan.columns.map(c=>c.id===column.id?{...c,...patch}:c)})
   }
   const updateOpening = (patch:Partial<NonNullable<typeof opening>>) => {
     if(!opening)return
@@ -97,7 +97,7 @@ export default function ProjectReview() {
     if(!Number.isFinite(factor) || factor<=0 || factor>100) {setMessage('Usa un factor mayor que 0 y hasta 100.');return}
     const current = snapshot(floorPlan,walls)
     const p = (v:{x:number;y:number;z:number})=>({x:v.x*factor,y:v.y*factor,z:v.z*factor})
-    const scaled:FloorPlan = {...current,walls:current.walls.map(w=>({...w,start:p(w.start),end:p(w.end),height:w.height*factor,thickness:w.thickness*factor})),
+    const scaled:FloorPlan = {...current,roof:null,walls:current.walls.map(w=>({...w,start:p(w.start),end:p(w.end),height:w.height*factor,thickness:w.thickness*factor})),
       columns:current.columns.map(c=>({...c,position:p(c.position),width:c.width*factor,depth:c.depth*factor,height:c.height*factor})),
       floor_regions:(current.floor_regions??[]).map(r=>({...r,points:r.points.map(p),holes:r.holes.map(ring=>ring.map(p))})),
       fixtures:(current.fixtures??[]).map(f=>({...f,position:p(f.position),dimensions:p(f.dimensions),
@@ -110,7 +110,7 @@ export default function ProjectReview() {
     const transform=current.source_transform as {format?:string;points_per_foot?:number}|undefined
     if(transform?.format==='pdf'&&typeof transform.points_per_foot==='number')scaled.source_transform={...transform,points_per_foot:transform.points_per_foot/factor}
     useProjectStore.setState({walls:scaled.walls.map(w=>({...w,start:[w.start.x,0,w.start.z],end:[w.end.x,0,w.end.z]})),furniture:[]})
-    changed({...scaled,furniture:[]}); setFactor(1); setMessage('Geometría reescalada. Mobiliario retirado; comprueba medidas y vuelve a guardarlo.')
+    changed({...scaled,furniture:[]}); setFactor(1); setMessage('Geometría reescalada. Techo y mobiliario retirados; comprueba medidas y vuelve a guardarlo.')
   }
   return <>
     <button disabled={recording} onClick={()=>{useProjectStore.setState({activePanel:null});setOpen(!open)}} className="absolute top-20 right-6 z-30 bg-white text-gray-800 rounded-lg px-4 py-2 shadow-lg text-sm">{open?'Cerrar revisión':'Revisión y archivo'}</button>
@@ -134,8 +134,8 @@ export default function ProjectReview() {
           {floorPlan.windows.map((o,i)=><option key={o.id} value={o.id}>Ventana {i+1}</option>)}
         </select>
         <div className="flex gap-2 text-xs">
-          <button className="border p-2 rounded" onClick={()=>{const id=crypto.randomUUID();setWalls([...walls,{id,start:[0,0,0],end:[1,0,0],height:2.8,thickness:.15}]);setSelected(id);changed({...floorPlan,rooms:[]})}}>Añadir muro</button>
-          <button className="border p-2 rounded" onClick={()=>{const id=crypto.randomUUID();changed({...floorPlan,columns:[...floorPlan.columns,{id,position:{x:0,y:0,z:0},width:.3,depth:.3,height:2.8}]});setSelected(id)}}>Añadir columna</button>
+          <button className="border p-2 rounded" onClick={()=>{const id=crypto.randomUUID();setWalls([...walls,{id,start:[0,0,0],end:[1,0,0],height:2.8,thickness:.15}]);setSelected(id);changed({...floorPlan,rooms:[],roof:null})}}>Añadir muro</button>
+          <button className="border p-2 rounded" onClick={()=>{const id=crypto.randomUUID();changed({...floorPlan,roof:null,columns:[...floorPlan.columns,{id,position:{x:0,y:0,z:0},width:.3,depth:.3,height:2.8}]});setSelected(id)}}>Añadir columna</button>
         </div>
         {wall && <div className="grid grid-cols-2 gap-2">
           {(['start','end'] as const).flatMap(side=>([0,2] as const).map(index=><NumberField key={`${side}${index}`} label={`${side==='start'?'Inicio':'Final'} ${index===0?'X':'Z'} (m)`} value={wall[side][index]} onChange={v=>{const point=[...wall[side]] as [number,number,number];point[index]=v;updateWall({[side]:point})}}/>))}
@@ -160,7 +160,7 @@ export default function ProjectReview() {
           {door && <label className="text-xs">Tipo de puerta<select aria-label="Tipo de puerta" value={door.operation??'hinged'} onChange={e=>updateOpening({operation:e.target.value as typeof door.operation})} className="block border rounded p-1.5 w-full">{[['hinged','Abatible'],['double_hinged','Doble'],['sliding','Corredera'],['overhead','Garaje'],['bifold','Plegable']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>}
         </div>}
         {opening && <button className="text-xs text-red-700" onClick={()=>{changed({...floorPlan,doors:floorPlan.doors.filter(o=>o.id!==selected),windows:floorPlan.windows.filter(o=>o.id!==selected)});setSelected('')}}>Eliminar abertura seleccionada</button>}
-        {(wall||column) && <button className="text-xs text-red-700" onClick={()=>{if(wall)setWalls(walls.filter(w=>w.id!==wall.id));changed({...floorPlan,rooms:[],columns:floorPlan.columns.filter(c=>c.id!==selected)});setSelected('')}}>Eliminar elemento seleccionado</button>}
+        {(wall||column) && <button className="text-xs text-red-700" onClick={()=>{if(wall)setWalls(walls.filter(w=>w.id!==wall.id));changed({...floorPlan,roof:null,rooms:[],columns:floorPlan.columns.filter(c=>c.id!==selected)});setSelected('')}}>Eliminar elemento seleccionado</button>}
         <div className="flex items-end gap-2"><NumberField label="Factor de escala global" value={factor} onChange={setFactor}/><button className="border rounded p-2 text-xs" onClick={scale}>Aplicar escala</button></div>
       </section>
       <section className="space-y-2 border-t pt-3 text-xs">

@@ -24,6 +24,16 @@ export interface FixedFixture {
   source_basin_outlines:Point[][]
   room_id?:string; parent_id?:string; [key:string]:unknown
 }
+export interface RoofSettings {
+  kind:'flat'|'shed'|'gable'|'hip'; pitch:number; eave_height:number; overhang:number
+  axis:'x'|'z'; material:'shingle'|'metal'|'tile'|'membrane'; color:string
+}
+export interface RoofMesh {vertices:Point[];triangles:number[][]}
+export interface RoofDefinition {
+  settings:RoofSettings; surface:RoofMesh; gables:RoofMesh; footprint_hash:string
+  status:'proposal'|'reviewed';origin:'design'|'document_parameters'|'imported_geometry'
+  source:{id?:string;name?:string;page?:number;sha256?:string;[key:string]:unknown}; warnings:string[]
+}
 export interface FloorPlan {
   walls: ModelWall[]; columns: ModelColumn[]; doors: Opening[]; windows: Opening[]
   rooms: ModelRoom[]; dimensions: Record<string, number>; warnings: string[]
@@ -33,6 +43,7 @@ export interface FloorPlan {
   tour_settings?: {duration:number;quality:'720p'|'1080p'}
   fixtures?: FixedFixture[]
   fixture_status?: {engine:number;status:string;warnings:string[]}
+  roof?:RoofDefinition|null
   architectural_info: ArchitecturalInfo; [key: string]: unknown
 }
 export interface LearningInfo { reused: boolean; contributing: boolean; trained_model: boolean }

@@ -66,7 +66,8 @@ export function CameraController() {
     if(!xs.length)return {x:0,z:0,width:8,depth:8,height:2.8}
     return {x:(Math.min(...xs)+Math.max(...xs))/2,z:(Math.min(...zs)+Math.max(...zs))/2,
       width:Math.max(2,Math.max(...xs)-Math.min(...xs)),depth:Math.max(2,Math.max(...zs)-Math.min(...zs)),
-      height:Math.max(2.8,...walls.map(w=>w.height),...(floorPlan?.columns??[]).map(c=>c.height))}
+      height:Math.max(2.8,...walls.map(w=>w.height),...(floorPlan?.columns??[]).map(c=>c.height),
+        ...(floorPlan?.roof?.surface.vertices.map(p=>p.y)??[]))}
   },[walls,floorPlan])
   const span=Math.max(bounds.width,bounds.depth)
   const distance=Math.max(span,bounds.height*2)*1.3
