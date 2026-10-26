@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 import re
 import shutil
 import subprocess
@@ -91,6 +92,14 @@ def release_model(original, patch):
             # Serve the compiled image, never a stale host dist directory from the old builder.
             for legacy in ('volumes','ports','profiles'):
                 service.pop(legacy,None)
+        if name=='backend':
+            # Only the reverse proxy is public. Never leave the legacy :8000
+            # publication open when trusting its forwarded HTTPS header.
+            ports=[]
+            for item in service.get('ports',[]):
+                local={**item,'host_ip':'127.0.0.1'}
+                if local not in ports:ports.append(local)
+            if ports:service['ports']=ports
     result['networks']={**result.get('networks',{}),**patch['networks']}
     return result
 
@@ -104,10 +113,24 @@ def private_json(path, data):
 
 
 def commands(state):
-    old = state['compose']+['-p',state['project'],'-f',str(Path(state['base'])/'docker-compose.yml')]
+    previous=state.get('previous_config') or [str(Path(state['base'])/'docker-compose.yml')]
+    old = state['compose']+['-p',state['project']]+[value for path in previous for value in ('-f',path)]
     if state.get('release_config'):
         return old, state['compose']+['-p',state['project'],'-f',state['release_config']]
     return old, old+['-f',str(CANDIDATE/'deployment.override.json')]
+
+
+def active_configuration(project):
+    result=subprocess.run(['docker','inspect','--format',
+        '{{index .Config.Labels "com.docker.compose.project.config_files"}}',project+'-backend-1'],
+        text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if result.returncode:
+        if 'No such' in result.stderr:return []
+        raise ValueError('No se pudo identificar la configuración activa para recuperar esta versión.')
+    paths=[str(Path(path.strip()).resolve()) for path in result.stdout.strip().split(',') if path.strip()]
+    if not paths or any(not Path(path).is_file() for path in paths):
+        raise ValueError('No se encontró la configuración de la versión activa; se detuvo la preparación.')
+    return paths
 
 
 def save(state):
@@ -137,6 +160,10 @@ def prepare(args):
              'engine_sha256':digest(base/'backend/app/services/vector_engine.py'),
              'compose_sha256':digest(base/'docker-compose.yml'),'nginx_sha256':digest(base/'nginx.conf'),
              'ready':False,'activated':False,'tag':tag}
+    previous=active_configuration(args.project)
+    if previous:
+        state['previous_config']=previous
+        state['previous_config_sha256']={path:digest(path) for path in previous}
     old, _ = commands(state)
     original=json.loads(subprocess.check_output(old+['config','--format','json'],text=True))
     if not {'backend','nginx'}.issubset(original.get('services',{})):
@@ -144,7 +171,14 @@ def prepare(args):
     # Compose's rendered JSON already escapes interpolation for a safe round trip.
     # This resolved configuration can contain credentials: keep it private, never print it.
     rendered=CANDIDATE/'deployment.compose.json'
-    private_json(rendered,release_model(original,build_override(base,CANDIDATE,tag)))
+    model=release_model(original,build_override(base,CANDIDATE,tag))
+    origin=getattr(args,'public_origin',None)
+    if origin:
+        parsed=urlsplit(origin)
+        if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or parsed.path not in ('','/') or parsed.query or parsed.fragment:
+            raise ValueError('--public-origin debe ser un origen HTTPS, por ejemplo https://app.tudominio.com')
+        model['services']['backend']['environment'].update({'AUTH_PUBLIC_ORIGIN':origin.rstrip('/'),'AUTH_COOKIE_SECURE':'true'})
+    private_json(rendered,model)
     state['release_config']=str(rendered)
     state['release_config_sha256']=digest(rendered)
     _, release = commands(state)
@@ -175,11 +209,13 @@ def prepare(args):
 
 
 def rollback(state):
+    for path,expected in state.get('previous_config_sha256',{}).items():
+        if digest(path)!=expected:raise ValueError('La configuración de recuperación cambió; no se activará una versión desconocida.')
     old, _ = commands(state)
     subprocess.run(old+['up','-d','--no-deps','backend','nginx'],check=True)
     state['activated']=False
     save(state)
-    print('Configuración original restaurada. Se conservan fuentes y datos de las dos versiones.')
+    print('Versión anterior restaurada. Se conservan fuentes y datos de las dos versiones.')
 
 
 def verify(base_url, release_id, index_sha256, attempts=30):
@@ -226,6 +262,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='action',required=True)
     p=sub.add_parser('prepare');p.add_argument('--base',required=True);p.add_argument('--backup',required=True)
+    p.add_argument('--public-origin',help='Origen HTTPS de acceso público, después de configurar el certificado y el proxy')
     p.add_argument('--project',default='archviz-pro');p.add_argument('--prepare-only',action='store_true')
     p=sub.add_parser('activate');p.add_argument('--url',default='http://127.0.0.1')
     sub.add_parser('rollback')

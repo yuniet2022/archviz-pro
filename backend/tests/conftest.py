@@ -17,5 +17,15 @@ from app.core.config import settings
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, 'PROJECT_DB', str(tmp_path/'projects.sqlite3'))
+    monkeypatch.setattr(settings,'AUTH_COOKIE_SECURE',False)
+    monkeypatch.setattr(settings,'AUTH_PUBLIC_ORIGIN','http://testserver')
+    from app.services.auth_store import AuthStore
+    from app.core.security_context import owner_id
+    account=AuthStore(settings.PROJECT_DB).create_user('architect@example.test','Architect','Testing-only-password-2026','admin',False)
+    context=owner_id.set(account['id'])
     with TestClient(app) as client:
-        yield client
+        response=client.post('/api/v1/auth/login',json={'email':account['email'],'password':'Testing-only-password-2026'})
+        assert response.status_code==200,response.text
+        client.headers['X-CSRF-Token']=response.json()['csrf_token']
+        try:yield client
+        finally:owner_id.reset(context)

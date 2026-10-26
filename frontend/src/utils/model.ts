@@ -1,6 +1,7 @@
 import { useProjectStore, type Wall } from '../stores/projectStore'
 import type { FloorPlan, LearningInfo } from '../types/model'
 import type { Point } from '../types/model'
+import {rememberedProjectKey} from '../stores/authStore'
 const tuple = (point: Point): [number,number,number] => [point.x,point.y,point.z]
 
 export function loadProject(data: {project_id: string; floor_plan: FloorPlan; revision: number; learning: LearningInfo; measurements_confirmed?: boolean}) {
@@ -17,7 +18,7 @@ export function loadProject(data: {project_id: string; floor_plan: FloorPlan; re
     tour:null,isPlaying:false,tourProgress:0,tourPointMode:false,
     tourDuration:Math.max(10,Math.min(180,data.floor_plan.tour_settings?.duration??60)),
     recordingQuality:data.floor_plan.tour_settings?.quality==='1080p'?'1080p':'720p' })
-  try { localStorage.setItem('archviz-project', data.project_id) } catch { /* storage may be unavailable */ }
+  try { localStorage.setItem(rememberedProjectKey(), data.project_id) } catch { /* storage may be unavailable */ }
 }
 
 export function snapshot(plan: FloorPlan, walls: Wall[]): FloorPlan {

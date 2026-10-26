@@ -98,7 +98,7 @@ Python 3.12 y Node 20 o superior; validado con Node 24.19.0.
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -r backend/requirements-dev.txt
 mkdir -p data/exports/videos
-PROJECT_DB="$PWD/data/projects.sqlite3" EXPORT_DIR="$PWD/data/exports" VIDEO_OUTPUT_DIR="$PWD/data/exports/videos" .venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+AUTH_COOKIE_SECURE=false AUTH_PUBLIC_ORIGIN=http://127.0.0.1:3000 PROJECT_DB="$PWD/data/projects.sqlite3" EXPORT_DIR="$PWD/data/exports" VIDEO_OUTPUT_DIR="$PWD/data/exports/videos" .venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
 En otra terminal:
@@ -109,9 +109,11 @@ npm ci
 npm run dev
 ```
 
+Para crear la primera cuenta local, desde la raíz del repositorio ejecuta `PYTHONPATH=backend PROJECT_DB="$PWD/data/projects.sqlite3" .venv/bin/python -m app.manage bootstrap-admin --email tu-correo@example.com --claim-legacy` en una terminal interactiva. La contraseña se pide sin mostrarla.
+
 Vite conserva el prefijo `/api` y dirige las peticiones al backend. La persistencia SQLite incluye archivos binarios y revisiones; `PROJECT_DB` define su ubicación. En Docker, `./data` se monta en `/app/data` para conservarla al recrear el contenedor. Respalda la base con el mecanismo de backup de SQLite y descarga el archivo del proyecto. No elimines el volumen de datos al actualizar.
 
-Esta base tiene un único espacio de trabajo sin autenticación ni separación por clientes. Antes de ofrecer archivos privados a usuarios independientes se necesita añadir cuentas, permisos y aislamiento. El paseo y su grabación funcionan en el navegador, sin depender del antiguo trabajador de vídeo Celery.
+Los proyectos, archivos y ejemplos de aprendizaje están separados por cuenta y requieren una sesión. La primera cuenta se crea desde la consola; consulta «Autenticación y proyectos privados» para configurar acceso local y HTTPS público. El paseo y su grabación funcionan en el navegador, sin depender del antiguo trabajador de vídeo Celery.
 
 ## Verificación
 
@@ -201,3 +203,44 @@ Endpoints de esta etapa:
 - `GET /api/v1/plans/{id}/sources/{source_id}/inspect?page=1`: datos explícitos y evidencias PDF.
 - `GET /api/v1/plans/{id}/sources/{source_id}/preview?page=1`: imagen de la página seleccionada.
 - `POST /api/v1/roofs/preview`: genera una propuesta sobre el modelo actual; opcionalmente vincula un documento del mismo proyecto. No guarda revisiones por sí mismo.
+
+## Autenticación y proyectos privados
+
+El visor requiere correo y contraseña. El administrador crea cuentas desde **Mi cuenta → Usuarios**; el registro público está deshabilitado. Cada cuenta abre **Mis proyectos** desde cualquier dispositivo y accede exclusivamente a sus casas, documentos, revisiones, ejemplos de aprendizaje y descargas. Ser administrador permite administrar cuentas, pero no leer automáticamente los proyectos de otras personas. Compartir proyectos entre cuentas todavía no está implementado.
+
+Las contraseñas se guardan como hashes scrypt con sal aleatoria. Las sesiones son tokens aleatorios revocables: la cookie es HttpOnly, SameSite=Lax y Secure por defecto; en la base se guarda únicamente la huella del token. Los cambios requieren un token CSRF y se comprueba el origen. Hay límites de intentos de acceso, caducidad absoluta de 12 horas configurable y revocación de sesiones al cambiar una contraseña o desactivar una cuenta. No se guardan contraseñas ni tokens de sesión en localStorage. Una respuesta de una cuenta anterior se descarta cuando cambia la sesión.
+
+**El acceso público requiere HTTPS.** Configura primero dominio, certificado y reverse proxy; `AUTH_PUBLIC_ORIGIN=https://app.tudominio.com` debe coincidir exactamente con el origen público. La API valida el esquema HTTPS detrás del proxy y usa `AUTH_COOKIE_SECURE=true`. El instalador admite `prepare --public-origin https://app.tudominio.com` para guardar ese origen en la configuración candidata; este parámetro **no emite certificados ni instala HTTPS**. El puerto publicado del backend se restringe a 127.0.0.1. Nginx sobrescribe Host y X-Forwarded-Proto; no expongas directamente el backend. El listado público de `/exports/` está retirado: las descargas se hacen por los endpoints del proyecto con permisos.
+
+En desarrollo local, API y Vite deben escuchar en loopback. Usa explícitamente `AUTH_COOKIE_SECURE=false` y `AUTH_PUBLIC_ORIGIN=http://127.0.0.1:3000`. La excepción HTTP solo admite nombres locales; no habilita el acceso con contraseña en una IP pública. La pantalla informa si falta HTTPS o la primera cuenta. `/health` y la información mínima de versión de `/api/v1/plans/learning/status` siguen disponibles para el actualizador, sin estadísticas privadas.
+
+### Primera cuenta y conservación de proyectos
+
+Después de configurar HTTPS y activar la versión, ejecuta en la consola del servidor:
+
+```bash
+docker exec -it archviz-pro-backend-1 python -m app.manage bootstrap-admin \
+  --email tu-correo@tudominio.com --name "Administrador" --claim-legacy
+```
+
+La consola pide y confirma una contraseña de al menos 12 caracteres sin mostrarla. No la pases como argumento ni la compartas en el chat. `--claim-legacy` asigna los proyectos anteriores sin dueño a esta primera cuenta; conserva los bytes de sus modelos, fuentes e historiales. La migración es aditiva y usa la misma base `PROJECT_DB`: incluye ahora también usuarios, sesiones, permisos y límites de acceso. Respalda toda la base mediante SQLite backup antes de actualizar. Ningún visitante puede reclamar los proyectos desde la web.
+
+Si creaste el administrador sin asignarle los proyectos anteriores, la consola permite:
+
+```bash
+docker exec -it archviz-pro-backend-1 python -m app.manage claim-legacy \
+  --email tu-correo@tudominio.com
+```
+
+Las cuentas creadas desde el panel reciben una contraseña temporal y deben cambiarla antes de acceder al visor. No se envían correos automáticamente. Para recuperar una contraseña, el operador del servidor ejecuta:
+
+```bash
+docker exec -it archviz-pro-backend-1 python -m app.manage reset-password \
+  --email usuario@tudominio.com
+```
+
+Se pide una nueva contraseña privada y se revocan las sesiones anteriores. La recuperación por correo y la autenticación de dos factores quedan fuera de esta etapa.
+
+Al preparar una actualización, el actualizador identifica la configuración Compose de la versión que está ejecutándose y la conserva como destino de recuperación. Así, una actualización posterior vuelve a la versión autenticada anterior. Evita ejecutar scripts de rollback de versiones antiguas sin autenticación: esas versiones no comprueban permisos.
+
+Endpoints nuevos: `GET /api/v1/auth/session`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `POST /api/v1/auth/password`, `GET/POST /api/v1/auth/users`, `PATCH /api/v1/auth/users/{id}` y `GET /api/v1/plans` para la lista privada de proyectos. Los endpoints existentes mantienen sus modelos y requieren sesión; las operaciones de escritura requieren `X-CSRF-Token`.

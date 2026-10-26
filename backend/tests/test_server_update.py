@@ -82,6 +82,7 @@ def test_preparation_checks_disable_tty_for_piped_input(tmp_path, monkeypatch):
     monkeypatch.setattr(module,'CANDIDATE',candidate)
     monkeypatch.setattr(module,'STATE',candidate/'deployment.state.json')
     monkeypatch.setattr(module,'compose_cli',lambda:['docker-compose'])
+    monkeypatch.setattr(module,'active_configuration',lambda project:[])
     checks=[]
 
     def compose_call(command, **kwargs):
@@ -105,3 +106,21 @@ def test_preparation_checks_disable_tty_for_piped_input(tmp_path, monkeypatch):
     assert len(checks)==2
     assert 'backend' in checks[0] and 'frontend' in checks[1]
     assert (candidate/'backend/app/services/vector_engine.py').read_bytes()==engine.read_bytes()
+
+
+def test_legacy_backend_port_is_loopback_only_after_auth_update(tmp_path):
+    module=updater()
+    original={'services':{'backend':{'ports':[{'target':8000,'published':'8000','host_ip':'0.0.0.0','protocol':'tcp'}]},'nginx':{}}}
+    release=module.release_model(original,module.build_override(tmp_path/'base',tmp_path/'candidate','test'))
+    assert release['services']['backend']['ports'][0]['host_ip']=='127.0.0.1'
+    assert original['services']['backend']['ports'][0]['host_ip']=='0.0.0.0'
+
+
+def test_recovery_uses_previous_active_release_instead_of_original_unauthenticated_app(tmp_path):
+    module=updater()
+    original=tmp_path/'original';previous=tmp_path/'previous-authenticated.compose.json'
+    state={'base':str(original),'project':'archviz-pro','compose':['docker-compose'],
+           'previous_config':[str(previous)],'release_config':str(tmp_path/'new.compose.json')}
+    old,new=module.commands(state)
+    assert old==['docker-compose','-p','archviz-pro','-f',str(previous)]
+    assert str(original/'docker-compose.yml') not in old

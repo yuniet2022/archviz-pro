@@ -7,6 +7,7 @@ import sqlite3
 import uuid
 
 from app.models.schemas import FloorPlanData, PlanReview
+from app.core.security_context import owner_id
 
 
 class RevisionConflict(Exception):
@@ -16,6 +17,7 @@ class RevisionConflict(Exception):
 class ProjectRepository:
     def __init__(self, path: str):
         self.path = path
+        self.owner_id = owner_id.get()
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
             db.executescript('''
@@ -41,6 +43,10 @@ class ProjectRepository:
                     id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
                     name TEXT NOT NULL, sha256 TEXT NOT NULL, role TEXT NOT NULL, content BLOB NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS project_owners (
+                    project_id TEXT PRIMARY KEY REFERENCES projects(id), user_id TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS owner_lookup ON project_owners(user_id);
                 CREATE TABLE IF NOT EXISTS source_details (
                     source_id TEXT PRIMARY KEY REFERENCES sources(id),
                     metadata TEXT NOT NULL
@@ -58,12 +64,31 @@ class ProjectRepository:
         finally:
             db.close()
 
+    def check_access(self, db, project_id):
+        if self.owner_id is not None and not db.execute(
+                'SELECT 1 FROM project_owners WHERE project_id=? AND user_id=?',
+                (project_id,self.owner_id)).fetchone():
+            raise KeyError(project_id)
+
+    def owner_filter(self, alias='p'):
+        if self.owner_id is None:return '',()
+        return f' AND EXISTS (SELECT 1 FROM project_owners own WHERE own.project_id={alias}.id AND own.user_id=?)',(self.owner_id,)
+
+    def list_projects(self):
+        clause,parameters=self.owner_filter()
+        with self.connection() as db:
+            rows=db.execute('SELECT p.id,p.current,p.revision,p.created_at FROM projects p WHERE 1=1'+clause+
+                            ' ORDER BY p.created_at DESC LIMIT 200',parameters).fetchall()
+        return [{'project_id':row['id'],'name':json.loads(row['current']).get('architectural_info',{}).get('project_name','Casa sin nombre'),
+                 'revision':row['revision'],'created_at':row['created_at']} for row in rows]
+
     @staticmethod
     def now():
         return datetime.now(timezone.utc).isoformat()
 
     def create(self, source_hash, recipe, source_type, predicted: FloorPlanData, reuse=True):
         project_id = str(uuid.uuid4())
+        clause,parameters=self.owner_filter()
         with self.connection() as db:
             # Consent/review changes and lookup+copy must not race.
             db.execute('BEGIN IMMEDIATE')
@@ -71,18 +96,20 @@ class ProjectRepository:
                 SELECT r.id, r.after_json FROM reviews r JOIN projects p ON p.id=r.project_id
                 WHERE p.source_hash=? AND p.recipe=? AND r.allow_learning=1
                     AND r.approved=1 AND r.measurements_confirmed=1
-                ORDER BY r.created_at DESC LIMIT 1
-            ''', (source_hash, recipe)).fetchone() if reuse else None
+            '''+clause+' ORDER BY r.created_at DESC LIMIT 1', (source_hash, recipe,*parameters)).fetchone() if reuse else None
             current = FloorPlanData.model_validate_json(example['after_json']) if example else predicted
             db.execute('''INSERT INTO projects
                 (id, source_hash, recipe, source_type, original, current, learning_source, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                 (project_id, source_hash, recipe, source_type, predicted.model_dump_json(),
                  current.model_dump_json(), example['id'] if example else None, self.now()))
+            if self.owner_id is not None:
+                db.execute('INSERT INTO project_owners VALUES (?,?)',(project_id,self.owner_id))
         return self.get(project_id)
 
     def get(self, project_id):
         with self.connection() as db:
+            self.check_access(db,project_id)
             row = db.execute('SELECT * FROM projects WHERE id=?', (project_id,)).fetchone()
             if row is None:
                 raise KeyError(project_id)
@@ -106,6 +133,7 @@ class ProjectRepository:
     def review(self, project_id, review: PlanReview):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
+            self.check_access(db,project_id)
             row = db.execute('SELECT * FROM projects WHERE id=?', (project_id,)).fetchone()
             if row is None:
                 raise KeyError(project_id)
@@ -126,27 +154,29 @@ class ProjectRepository:
     def revoke(self, project_id):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
+            self.check_access(db,project_id)
             if db.execute('SELECT id FROM projects WHERE id=?', (project_id,)).fetchone() is None:
                 raise KeyError(project_id)
             db.execute('UPDATE reviews SET allow_learning=0 WHERE project_id=?', (project_id,))
         return self.get(project_id)
 
     def stats(self):
+        clause,parameters=self.owner_filter()
         with self.connection() as db:
-            examples = db.execute('''SELECT COUNT(*) FROM reviews WHERE approved=1
-                AND measurements_confirmed=1 AND allow_learning=1''').fetchone()[0]
-            reused = db.execute('SELECT COUNT(*) FROM projects WHERE learning_source IS NOT NULL').fetchone()[0]
+            examples = db.execute('''SELECT COUNT(*) FROM reviews r JOIN projects p ON p.id=r.project_id
+                WHERE r.approved=1 AND r.measurements_confirmed=1 AND r.allow_learning=1'''+clause,parameters).fetchone()[0]
+            reused = db.execute('SELECT COUNT(*) FROM projects p WHERE p.learning_source IS NOT NULL'+clause,parameters).fetchone()[0]
         return {'mode': 'reviewed_exact_match', 'approved_examples': examples,
                 'reused_imports': reused, 'trained_model': False,
-                'message': 'Reutiliza revisiones del mismo archivo y configuración. No generaliza a casas nuevas.'}
+                'message': 'Reutiliza revisiones del mismo archivo y configuración dentro de tu cuenta. No generaliza a casas nuevas.'}
 
     def dataset(self):
+        clause,parameters=self.owner_filter()
         with self.connection() as db:
             rows = db.execute('''SELECT r.*, p.source_hash, p.recipe, p.source_type, p.original
                 FROM reviews r JOIN projects p ON p.id=r.project_id
-                WHERE r.approved=1 AND r.measurements_confirmed=1 AND r.allow_learning=1
-                ORDER BY r.created_at, r.id''').fetchall()
-        # Original detector output, not the last edited version, is the training input.
+                WHERE r.approved=1 AND r.measurements_confirmed=1 AND r.allow_learning=1'''+clause+
+                ' ORDER BY r.created_at, r.id',parameters).fetchall()
         return [{'schema_version': 1, 'example_id': r['id'], 'source_sha256': r['source_hash'],
                  'recipe': json.loads(r['recipe']), 'source_type': r['source_type'],
                  'predicted': json.loads(r['original']), 'corrected': json.loads(r['after_json']),
@@ -155,6 +185,7 @@ class ProjectRepository:
     def add_source(self, project_id, name, digest, role, content, metadata=None):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
+            self.check_access(db,project_id)
             if db.execute('SELECT id FROM projects WHERE id=?', (project_id,)).fetchone() is None:
                 raise KeyError(project_id)
             duplicate=db.execute('SELECT id FROM sources WHERE project_id=? AND sha256=?',(project_id,digest)).fetchone()
@@ -175,6 +206,7 @@ class ProjectRepository:
         project=self.get(project_id)
         fields = '*' if include_content else 'id, name, sha256, role, length(content) AS size_bytes'
         with self.connection() as db:
+            self.check_access(db,project_id)
             rows=[dict(row) for row in db.execute(f'SELECT {fields} FROM sources WHERE project_id=? ORDER BY rowid', (project_id,))]
             details={r['source_id']:json.loads(r['metadata']) for r in db.execute(
                 'SELECT d.* FROM source_details d JOIN sources s ON s.id=d.source_id WHERE s.project_id=?',(project_id,))}
@@ -184,6 +216,7 @@ class ProjectRepository:
 
     def source(self, project_id, source_id):
         with self.connection() as db:
+            self.check_access(db,project_id)
             row=db.execute('SELECT * FROM sources WHERE project_id=? AND id=?',(project_id,source_id)).fetchone()
             if row is None:raise KeyError(source_id)
             detail=db.execute('SELECT metadata FROM source_details WHERE source_id=?',(source_id,)).fetchone()
@@ -192,6 +225,7 @@ class ProjectRepository:
     def describe_source(self, project_id, source_id, metadata):
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
+            self.check_access(db,project_id)
             if db.execute('SELECT id FROM sources WHERE project_id=? AND id=?',(project_id,source_id)).fetchone() is None:
                 raise KeyError(source_id)
             db.execute('INSERT OR REPLACE INTO source_details VALUES (?,?)',(source_id,json.dumps(metadata)))
@@ -200,6 +234,7 @@ class ProjectRepository:
     def history(self, project_id):
         self.get(project_id)
         with self.connection() as db:
+            self.check_access(db,project_id)
             rows = db.execute('SELECT * FROM reviews WHERE project_id=? ORDER BY revision', (project_id,)).fetchall()
         return [{**{k: r[k] for k in ('id', 'revision', 'approved', 'allow_learning', 'measurements_confirmed', 'notes', 'created_at')},
                  'before': json.loads(r['before_json']), 'after': json.loads(r['after_json'])} for r in rows]
@@ -207,12 +242,14 @@ class ProjectRepository:
     def original_source(self, project_id):
         self.get(project_id)
         with self.connection() as db:
+            self.check_access(db,project_id)
             row=db.execute("SELECT name,sha256,content FROM sources WHERE project_id=? AND role='original' ORDER BY rowid LIMIT 1",(project_id,)).fetchone()
         return dict(row) if row else None
 
     def archive_snapshot(self, project_id, include_content=True):
         with self.connection() as db:
             db.execute('BEGIN')
+            self.check_access(db,project_id)
             row = db.execute('SELECT * FROM projects WHERE id=?', (project_id,)).fetchone()
             if row is None:
                 raise KeyError(project_id)

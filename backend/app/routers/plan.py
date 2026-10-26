@@ -8,7 +8,7 @@ from uuid import UUID
 from zipfile import ZipFile, ZIP_DEFLATED
 from ezdxf import DXFError
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import ValidationError
 
@@ -107,8 +107,15 @@ def upload_plan(file: UploadFile = File(...), page: int = Form(1, ge=1),
 
 
 @router.get('/learning/status')
-def learning_status():
+def learning_status(request: Request):
+    if not getattr(request.state,'user',None):
+        return {'mode':'reviewed_exact_match','release':settings.APP_RELEASE_ID}
     return {**repository().stats(), 'release':settings.APP_RELEASE_ID}
+
+
+@router.get('')
+def my_projects():
+    return {'projects':repository().list_projects()}
 
 
 @router.get('/learning/dataset')

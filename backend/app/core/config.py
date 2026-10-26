@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+from pydantic import Field
 
 class Settings(BaseSettings):
     APP_NAME: str = "ArchViz Pro API"
@@ -14,6 +15,9 @@ class Settings(BaseSettings):
     EXPORT_DIR: str = "/app/exports"
     ASSET_DIR: str = "/app/assets"
     PROJECT_DB: str = "/app/data/projects.sqlite3"
+    AUTH_COOKIE_SECURE: bool = True
+    AUTH_PUBLIC_ORIGIN: str = ""
+    AUTH_SESSION_HOURS: int = Field(default=12,ge=1,le=168)
 
     FFMPEG_PATH: str = "ffmpeg"
     VIDEO_OUTPUT_DIR: str = "/app/exports/videos"

@@ -13,6 +13,8 @@ import ProjectReview from './components/ProjectReview'
 import RoofAndPlans from './components/RoofAndPlans'
 import axios from 'axios'
 import { loadProject } from './utils/model'
+import AccountMenu from './components/AccountMenu'
+import {rememberedProjectKey} from './stores/authStore'
 
 export default function App() {
   const projectId=useProjectStore(s=>s.projectId),viewMode=useProjectStore(s=>s.viewMode)
@@ -20,10 +22,11 @@ export default function App() {
   useEffect(()=>{
     let active=true
     let previous:string|null=null
-    try {previous=localStorage.getItem('archviz-project')} catch {return}
+    try {previous=localStorage.getItem(rememberedProjectKey())??localStorage.getItem('archviz-project')} catch {return}
     if(previous) axios.get(`/api/v1/plans/${previous}`).then(r=>{
       if(active && !useProjectStore.getState().projectId) loadProject(r.data)
-    }).catch(()=>{ /* A missing project leaves the uploader available. */ })
+    }).catch(()=>{ /* A missing or foreign project leaves the uploader available. */ })
+    try{localStorage.removeItem('archviz-project')}catch{/* optional */}
     return ()=>{active=false}
   },[])
 
@@ -65,7 +68,10 @@ export default function App() {
             </div>
           </div>
         )}
-        {projectId && <button disabled={recording} className="text-white text-xs border border-white/30 rounded px-3 py-2" onClick={()=>{if(useProjectStore.getState().dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y abrir otro archivo?'))return;useProjectStore.getState().clearProject();try{localStorage.removeItem('archviz-project')}catch{/* optional */}}}>Nueva casa / importar</button>}
+        <div className="flex gap-2 items-center">
+        {projectId && <button disabled={recording} className="text-white text-xs border border-white/30 rounded px-3 py-2" onClick={()=>{if(useProjectStore.getState().dirty && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y abrir otro archivo?'))return;useProjectStore.getState().clearProject();try{localStorage.removeItem(rememberedProjectKey())}catch{/* optional */}}}>Nueva casa / importar</button>}
+        <AccountMenu/>
+        </div>
       </header>
       <ProjectReview />
       <RoofAndPlans />
