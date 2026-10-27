@@ -133,6 +133,12 @@ def active_configuration(project):
     return paths
 
 
+def frontend_running(project):
+    result=subprocess.run(['docker','inspect','--format','{{.State.Running}}',project+'-frontend-1'],
+                          text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    return result.returncode==0 and result.stdout.strip()=='true'
+
+
 def save(state):
     private_json(STATE,state)
 
@@ -160,6 +166,7 @@ def prepare(args):
              'engine_sha256':digest(base/'backend/app/services/vector_engine.py'),
              'compose_sha256':digest(base/'docker-compose.yml'),'nginx_sha256':digest(base/'nginx.conf'),
              'ready':False,'activated':False,'tag':tag}
+    state['previous_frontend_running']=frontend_running(args.project)
     previous=active_configuration(args.project)
     if previous:
         state['previous_config']=previous
@@ -212,7 +219,8 @@ def rollback(state):
     for path,expected in state.get('previous_config_sha256',{}).items():
         if digest(path)!=expected:raise ValueError('La configuración de recuperación cambió; no se activará una versión desconocida.')
     old, _ = commands(state)
-    subprocess.run(old+['up','-d','--no-deps','backend','nginx'],check=True)
+    services=['backend','frontend','nginx'] if state.get('previous_frontend_running') else ['backend','nginx']
+    subprocess.run(old+['up','-d','--no-deps',*services],check=True)
     state['activated']=False
     save(state)
     print('Versión anterior restaurada. Se conservan fuentes y datos de las dos versiones.')

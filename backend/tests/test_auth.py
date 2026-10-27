@@ -235,3 +235,14 @@ def test_real_client_rate_limit_address_only_trusted_behind_local_proxy():
     assert effective_scheme(request('172.18.0.2'))=='https'
     assert client_address(request('8.8.8.8'))=='8.8.8.8'
     assert effective_scheme(request('8.8.8.8'))=='http'
+
+
+def test_console_password_validation_never_displays_entered_password(tmp_path,monkeypatch):
+    from app import manage
+    monkeypatch.setattr(settings,'PROJECT_DB',str(tmp_path/'validation.sqlite3'))
+    monkeypatch.setattr(manage.sys.stdin,'isatty',lambda:True)
+    monkeypatch.setattr(manage.getpass,'getpass',lambda prompt:'weak-pw')
+    monkeypatch.setattr(manage.sys,'argv',['manage','bootstrap-admin','--email','operator@example.test'])
+    with pytest.raises(ValueError) as error:manage.main()
+    assert 'weak-pw' not in str(error.value)
+    assert 'input_value' not in str(error.value)

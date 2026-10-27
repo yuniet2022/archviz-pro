@@ -2,6 +2,7 @@
 import argparse
 import getpass
 import sys
+from pydantic import ValidationError
 from app.core.config import settings
 from app.services.auth_store import AuthStore
 from app.routers.auth import NewUser
@@ -29,7 +30,11 @@ def main():
         raise ValueError('Usa una consola interactiva (docker exec -it). La contraseña no debe pasarse por argumentos ni pegarse en este chat.')
     password=getpass.getpass('Contraseña nueva (mínimo 12 caracteres): ')
     if password!=getpass.getpass('Repite la contraseña: '):raise ValueError('Las contraseñas no coinciden.')
-    values=NewUser(email=email,name=getattr(args,'name','Cuenta'),password=password)
+    try:
+        values=NewUser(email=email,name=getattr(args,'name','Cuenta'),password=password)
+    except ValidationError as error:
+        # Never echo the password through Pydantic's input_value in the console.
+        raise ValueError('; '.join(item['msg'] for item in error.errors(include_input=False,include_context=False))) from None
     if args.command=='bootstrap-admin':
         account=auth.create_user(values.email,values.name,values.password,'admin',False,bootstrap=True,claim_legacy=args.claim_legacy)
         print('Administrador creado. Proyectos anteriores asignados:',account['claimed_projects'])

@@ -83,6 +83,7 @@ def test_preparation_checks_disable_tty_for_piped_input(tmp_path, monkeypatch):
     monkeypatch.setattr(module,'STATE',candidate/'deployment.state.json')
     monkeypatch.setattr(module,'compose_cli',lambda:['docker-compose'])
     monkeypatch.setattr(module,'active_configuration',lambda project:[])
+    monkeypatch.setattr(module,'frontend_running',lambda project:False)
     checks=[]
 
     def compose_call(command, **kwargs):
@@ -124,3 +125,13 @@ def test_recovery_uses_previous_active_release_instead_of_original_unauthenticat
     old,new=module.commands(state)
     assert old==['docker-compose','-p','archviz-pro','-f',str(previous)]
     assert str(original/'docker-compose.yml') not in old
+
+
+def test_rollback_restores_the_previous_compiled_frontend(tmp_path,monkeypatch):
+    module=updater();calls=[]
+    state={'base':str(tmp_path),'project':'archviz-test','compose':['docker-compose'],
+           'previous_config':[str(tmp_path/'previous.json')],'previous_frontend_running':True}
+    monkeypatch.setattr(module.subprocess,'run',lambda command,**kwargs:calls.append(command))
+    monkeypatch.setattr(module,'save',lambda value:None)
+    module.rollback(state)
+    assert calls[0][-3:]==['backend','frontend','nginx']
